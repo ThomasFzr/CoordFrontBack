@@ -214,6 +214,23 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
 .flash .card { animation: flash 1.5s ease-out; }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } }
 
+.danger { background: var(--error); border-color: var(--error); color: #fff; }
+.danger-outline { color: var(--error); border-color: var(--error); }
+.edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 0 24px; }
+.edit-form label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.edit-form label:has(textarea), .edit-form .actions { grid-column: 1 / -1; }
+.edit-form .actions { margin: 4px 0 0; }
+.edit-form input, .edit-form textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.edit-form textarea { min-height: 90px; resize: vertical; }
+.detail > div > h2:first-child { margin-top: 56px; }
+
 @media (max-width: 600px) {
   .topbar, main { padding-left: 16px; padding-right: 16px; }
 }

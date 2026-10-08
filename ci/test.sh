@@ -74,6 +74,21 @@ grep -q '^: keepalive' "$sse" || fail "SSE : keepalive absent"
 ok "SSE via nginx : ready, 6 listing-updated ordonnés, ids, keepalive, aucune donnée privée"
 rm -f "$sse"
 
+# --- Champs protégés et concurrence optimiste (If-Match) ---
+[ "$(code -X POST "$API/listings" -d '{"_id":"ci-cas","name":"Concurrence"}')" = 201 ] || fail "POST ci-cas"
+for body in '{"status":"BOOKED"}' '{"booking.customerId":"pirate"}' '{"version":99}' '{"$where":"1"}'; do
+  [ "$(code -X PATCH "$API/listings/ci-cas" -d "$body")" = 400 ] || fail "PATCH protégé refusé : $body"
+done
+[ "$(code -X POST "$API/listings" -d '{"_id":"ci-x","name":"x","status":"BOOKED"}')" = 400 ] || fail "POST avec status refusé"
+[ "$(code -X PATCH -H 'If-Match: 7' "$API/listings/ci-cas" -d '{"beds":2}')" = 409 ] || fail "PATCH version périmée 409"
+[ "$(code -X PATCH -H 'If-Match: 1' "$API/listings/ci-cas" -d '{"beds":2}')" = 200 ] || fail "PATCH bonne version 200"
+[ "$(code -X PATCH -H 'If-Match: 1' "$API/listings/ci-cas" -d '{"beds":3}')" = 409 ] || fail "PATCH sur version déjà modifiée 409"
+[ "$(code -X PUT -H 'If-Match: 1' "$API/listings/ci-cas" -d '{"name":"Remplacé"}')" = 409 ] || fail "PUT version périmée 409"
+[ "$(code -X PATCH -H 'If-Match: none' "$API/listings/ci-001" -d '{"beds":2}')" = 200 ] || fail "PATCH document sans version (If-Match: none)"
+[ "$(code -X DELETE -H 'If-Match: 1' "$API/listings/ci-cas")" = 409 ] || fail "DELETE version périmée 409"
+[ "$(code -X DELETE -H 'If-Match: 2' "$API/listings/ci-cas")" = 204 ] || fail "DELETE bonne version 204"
+ok "champs protégés (400) et concurrence optimiste If-Match (409 si l'annonce a changé)"
+
 # --- Front ---
 curl -sf "$FRONT/" | grep -q 'src="app.js"' || fail "index.html"
 for f in app.js view.js; do

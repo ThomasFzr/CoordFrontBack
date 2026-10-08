@@ -78,8 +78,9 @@ export function renderCard(listing, onSelect) {
   return item;
 }
 
-export function renderDetail(listing, container, { message = '', mine = false, onReserve, onRelease } = {}) {
-  const place = [listing.address?.street, listing.address?.country].filter(Boolean).join(', ');
+export function renderDetail(listing, container, { message = '', mine = false, confirmDelete = false, onReserve, onRelease, onEdit, onDelete, onAskDelete } = {}) {
+  // street contient déjà ville et pays dans sample_airbnb : on ne les répète pas.
+  const place = listing.address?.street || [listing.address?.market, listing.address?.country].filter(Boolean).join(', ');
   const facts = [
     ['Type', `${listing.property_type ?? '—'} · ${listing.room_type ?? '—'}`],
     ['Capacité', `${listing.accommodates ?? '?'} personnes`],
@@ -125,10 +126,30 @@ export function renderDetail(listing, container, { message = '', mine = false, o
     actions.append(el('span', 'hint', isBooked(listing) ? 'Réservé' : 'Réservation possible uniquement sur les annonces de test.'));
   }
 
+  const manage = el('div', 'actions');
+  const edit = el('button', '', 'Modifier');
+  edit.type = 'button';
+  edit.addEventListener('click', () => onEdit?.());
+  if (confirmDelete) {
+    const confirm = el('button', 'danger', 'Confirmer la suppression');
+    confirm.type = 'button';
+    confirm.addEventListener('click', () => { confirm.disabled = true; onDelete?.(); });
+    const keep = el('button', '', 'Garder l’annonce');
+    keep.type = 'button';
+    keep.addEventListener('click', () => onAskDelete?.(false));
+    manage.append(el('span', 'hint', 'Supprimer définitivement cette annonce ?'), confirm, keep);
+  } else {
+    const remove = el('button', 'danger-outline', 'Supprimer');
+    remove.type = 'button';
+    remove.addEventListener('click', () => onAskDelete?.(true));
+    manage.append(edit, remove);
+  }
+
   container.replaceChildren(
     image(listing),
     el('h2', '', titleOf(listing)),
     actions,
+    manage,
     ...(message ? [el('p', 'message', message)] : []),
     el('p', 'card-place', place),
     el('p', 'summary', listing.summary || listing.description || ''),
@@ -136,4 +157,85 @@ export function renderDetail(listing, container, { message = '', mine = false, o
     ...(amenities.childElementCount ? [el('h3', '', 'Équipements'), amenities] : []),
     ...(reviews.childElementCount ? [el('h3', '', 'Derniers avis'), reviews] : []),
   );
+}
+
+// --- Formulaire de création / modification ---
+// path : chemin pointé dans le document (address.market) ; utilisé tel quel pour un PATCH partiel.
+const FIELDS = [
+  { path: 'name', label: 'Nom', type: 'text', required: true },
+  { path: 'summary', label: 'Résumé', type: 'textarea' },
+  { path: 'property_type', label: 'Type de logement', type: 'text' },
+  { path: 'room_type', label: 'Type de location', type: 'text' },
+  { path: 'accommodates', label: 'Capacité (personnes)', type: 'number', min: 1, step: 1 },
+  { path: 'bedrooms', label: 'Chambres', type: 'number', min: 0, step: 1 },
+  { path: 'beds', label: 'Lits', type: 'number', min: 0, step: 1 },
+  { path: 'price', label: 'Prix par nuit ($)', type: 'number', min: 0, step: 'any' },
+  { path: 'address.market', label: 'Ville', type: 'text' },
+  { path: 'address.country', label: 'Pays', type: 'text' },
+  { path: 'images.picture_url', label: 'URL de la photo', type: 'url' },
+];
+
+const read = (obj, path) => path.split('.').reduce((value, key) => value?.[key], obj);
+
+function setPath(obj, path, value) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  let target = obj;
+  for (const key of keys) target = target[key] ??= {};
+  target[last] = value;
+}
+
+// Création : document imbriqué. Modification : seulement les champs changés, en chemins pointés.
+function collect(form, listing) {
+  const values = {};
+  for (const field of FIELDS) {
+    const raw = form.elements[field.path].value.trim();
+    const value = field.type === 'number' ? (raw === '' ? null : Number(raw)) : raw;
+    if (!listing) {
+      if (value !== '' && value !== null) setPath(values, field.path, value);
+    } else if (value !== (read(listing, field.path) ?? (field.type === 'number' ? null : ''))) {
+      values[field.path] = value;
+    }
+  }
+  return values;
+}
+
+export function renderForm(listing, container, { message = '', onSubmit, onCancel } = {}) {
+  const form = el('form', 'edit-form');
+  form.noValidate = false;
+  for (const field of FIELDS) {
+    const label = el('label', '', field.label);
+    const input = el(field.type === 'textarea' ? 'textarea' : 'input');
+    input.name = field.path;
+    if (field.type !== 'textarea') input.type = field.type;
+    if (field.required) input.required = true;
+    if (field.min !== undefined) input.min = field.min;
+    if (field.step !== undefined) input.step = field.step;
+    const current = read(listing, field.path);
+    input.value = current ?? '';
+    label.append(input);
+    form.append(label);
+  }
+
+  const buttons = el('div', 'actions');
+  const save = el('button', 'primary', listing ? 'Enregistrer' : 'Créer l’annonce');
+  save.type = 'submit';
+  const cancel = el('button', '', 'Annuler');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => onCancel?.());
+  buttons.append(save, cancel);
+  form.append(buttons);
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    save.disabled = true;
+    onSubmit?.(collect(form, listing));
+  });
+
+  container.replaceChildren(
+    el('h2', '', listing ? `Modifier « ${titleOf(listing)} »` : 'Nouvelle annonce'),
+    ...(message ? [el('p', 'message', message)] : []),
+    form,
+  );
+  form.elements.name.focus();
 }

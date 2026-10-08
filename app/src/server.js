@@ -60,6 +60,18 @@ setInterval(() => {
   for (const res of sseClients) send(res, ': keepalive\n\n');
 }, HEARTBEAT_MS).unref();
 
+// Champs gérés par l'API seule : jamais écrits par un client, même via une clé pointée (booking.customerId).
+const PROTECTED = ['_id', 'booking', 'status', 'version'];
+const isForbiddenKey = (key) => key.startsWith('$') || PROTECTED.includes(key.split('.')[0]);
+const forbiddenKeys = (body) => Object.keys(body ?? {}).filter(isForbiddenKey);
+
+// Concurrence optimiste : If-Match porte la version lue par le client ("none" si l'annonce n'en a pas).
+function versionFilter(req) {
+  const expected = req.get('If-Match');
+  if (expected === undefined) return {};
+  return expected === 'none' ? { version: { $exists: false } } : { version: Number(expected) };
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -73,9 +85,9 @@ app.get('/', (req, res) => {
       'GET /listings?page=&limit=&q=&property_type=&country=&market=',
       'GET /listings/:id',
       'POST /listings',
-      'PUT /listings/:id',
-      'PATCH /listings/:id',
-      'DELETE /listings/:id',
+      'PUT /listings/:id     (If-Match: <version> optionnel → 409 si modifiée entre-temps)',
+      'PATCH /listings/:id   (If-Match optionnel)',
+      'DELETE /listings/:id  (If-Match optionnel)',
       'POST /listings/:id/reservations   { customerId } → 201 | 409 | 404',
       'DELETE /listings/:id/reservations { customerId } → 204 | 403 | 404',
       'GET /events (SSE : ready, listing-updated, : keepalive)',
@@ -128,8 +140,10 @@ app.get('/listings/:id', async (req, res) => {
 
 app.post('/listings', async (req, res) => {
   if (!req.body?.name) return res.status(400).json({ error: '"name" is required' });
-  const { booking, status, version, ...fields } = req.body;
-  const doc = { ...fields, _id: String(req.body._id ?? new ObjectId()), version: 1 };
+  const { _id: wantedId, ...fields } = req.body;
+  const forbidden = forbiddenKeys(fields);
+  if (forbidden.length) return res.status(400).json({ error: `Champs non modifiables : ${forbidden.join(', ')}` });
+  const doc = { ...fields, _id: String(wantedId ?? new ObjectId()), version: 1 };
   if (await listings.findOne({ _id: doc._id }, { projection: { _id: 1 } })) {
     return res.status(409).json({ error: 'Listing already exists' });
   }
@@ -140,37 +154,55 @@ app.post('/listings', async (req, res) => {
 
 app.put('/listings/:id', async (req, res) => {
   if (!req.body?.name) return res.status(400).json({ error: '"name" is required' });
-  const { _id, booking, status, version, ...doc } = req.body;
+  const { _id, ...doc } = req.body;
+  const forbidden = forbiddenKeys(doc);
+  if (forbidden.length) return res.status(400).json({ error: `Champs non modifiables : ${forbidden.join(', ')}` });
   const current = await listings.findOne({ _id: req.params.id }, { projection: { version: 1, status: 1, booking: 1 } });
   if (!current) return res.status(404).json({ error: 'Listing not found' });
+  const expected = req.get('If-Match');
+  if (expected !== undefined && expected !== String(current.version ?? 'none')) {
+    return res.status(409).json({ error: 'Listing modified meanwhile', version: current.version ?? null });
+  }
   // Remplacer le contenu ne libère pas une réservation : statut et réservation sont conservés.
   const kept = Object.fromEntries(Object.entries({ status: current.status, booking: current.booking }).filter(([, v]) => v !== undefined));
   const result = await listings.findOneAndReplace(
-    { _id: req.params.id },
+    { _id: req.params.id, version: current.version ?? { $exists: false } },
     { ...doc, ...kept, version: (current.version ?? 0) + 1 },
     { returnDocument: 'after', projection: PUBLIC_PROJECTION },
   );
-  if (!result) return res.status(404).json({ error: 'Listing not found' });
+  if (!result) return res.status(409).json({ error: 'Listing modified meanwhile' });
   notifyChanged(result._id, 'updated', result.version);
   res.json(result);
 });
 
 app.patch('/listings/:id', async (req, res) => {
-  const { _id, booking, status, version, ...changes } = req.body ?? {};
+  const { _id, ...changes } = req.body ?? {};
   if (Object.keys(changes).length === 0) return res.status(400).json({ error: 'Empty body' });
+  const forbidden = forbiddenKeys(changes);
+  if (forbidden.length) return res.status(400).json({ error: `Champs non modifiables : ${forbidden.join(', ')}` });
   const result = await listings.findOneAndUpdate(
-    { _id: req.params.id },
+    { _id: req.params.id, ...versionFilter(req) },
     { $set: changes, $inc: { version: 1 } },
     { returnDocument: 'after', projection: PUBLIC_PROJECTION },
   );
-  if (!result) return res.status(404).json({ error: 'Listing not found' });
+  if (!result) {
+    const exists = await listings.findOne({ _id: req.params.id }, { projection: { version: 1 } });
+    return exists
+      ? res.status(409).json({ error: 'Listing modified meanwhile', version: exists.version ?? null })
+      : res.status(404).json({ error: 'Listing not found' });
+  }
   notifyChanged(result._id, 'updated', result.version);
   res.json(result);
 });
 
 app.delete('/listings/:id', async (req, res) => {
-  const { deletedCount } = await listings.deleteOne({ _id: req.params.id });
-  if (!deletedCount) return res.status(404).json({ error: 'Listing not found' });
+  const { deletedCount } = await listings.deleteOne({ _id: req.params.id, ...versionFilter(req) });
+  if (!deletedCount) {
+    const exists = await listings.findOne({ _id: req.params.id }, { projection: { _id: 1 } });
+    return exists
+      ? res.status(409).json({ error: 'Listing modified meanwhile' })
+      : res.status(404).json({ error: 'Listing not found' });
+  }
   notifyChanged(req.params.id, 'deleted', null);
   res.status(204).end();
 });

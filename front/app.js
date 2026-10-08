@@ -1,4 +1,4 @@
-import { isTestListing, renderCards, renderDetail, validateListing, validatePage } from './view.js';
+import { renderCards, renderDetail, renderForm, validateListing, validatePage } from './view.js';
 
 // Même origine : nginx relaie /api vers l'API (pas de CORS, pas de port en dur).
 const API_URL = '/api';
@@ -32,14 +32,19 @@ const detailBody = document.querySelector('#detail-body');
 const live = document.querySelector('#live');
 const toasts = document.querySelector('#toasts');
 const addTest = document.querySelector('#add-test');
+const addListing = document.querySelector('#add-listing');
 
 let page = 1;
 let pages = 1;
 let openId = null;      // annonce affichée dans la fiche
-let detailMessage = ''; // confirmation personnelle : seulement dans l'onglet qui a agi
+let current = null;     // dernière version lue de cette annonce (sa version sert à If-Match)
+let mode = 'detail';    // detail | edit | create : un formulaire en cours n'est jamais écrasé par une relecture
+let confirmDelete = false;
+let detailMessage = ''; // message personnel : seulement dans l'onglet qui a agi
 
 async function getJson(path) {
   const response = await fetch(`${API_URL}${path}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+  if (response.status === 404) throw new Error('Cette annonce n’existe plus.');
   if (!response.ok) throw new Error(`La récupération a échoué (HTTP ${response.status}).`);
   return response.json();
 }
@@ -110,29 +115,133 @@ function loadListings() {
 }
 
 // --- Fiche détail ---
+function showDetail() {
+  renderDetail(current, detailBody, {
+    message: detailMessage,
+    mine: mine.has(current._id),
+    confirmDelete,
+    onReserve: reserve,
+    onRelease: release,
+    onEdit: () => { mode = 'edit'; detailMessage = ''; showForm(); },
+    onAskDelete: (ask) => { confirmDelete = ask; showDetail(); },
+    onDelete: removeListing,
+  });
+}
+
 async function refreshDetail() {
-  if (!openId) return;
+  if (!openId || mode !== 'detail') return;
   const id = openId;
   try {
     const listing = validateListing(await getJson(`/listings/${encodeURIComponent(id)}`));
     if (listing.status !== 'BOOKED' && mine.delete(id)) saveMine();
-    if (openId === id) {
-      renderDetail(listing, detailBody, { message: detailMessage, mine: mine.has(id), onReserve: reserve, onRelease: release });
+    if (openId === id && mode === 'detail') {
+      current = listing;
+      showDetail();
     }
   } catch (error) {
-    if (openId === id) detailBody.textContent = error.message;
+    if (openId === id && mode === 'detail') detailBody.textContent = error.message;
   }
 }
 
 function openDetail(id) {
   openId = id;
+  current = null;
+  mode = 'detail';
+  confirmDelete = false;
   detailMessage = '';
   detailBody.textContent = 'Chargement…';
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
   refreshDetail();
 }
 
-dialog.addEventListener('close', () => { openId = null; });
+dialog.addEventListener('close', () => { openId = null; current = null; mode = 'detail'; });
+
+// --- CRUD ---
+function showForm(message = '') {
+  renderForm(mode === 'edit' ? current : null, detailBody, {
+    message,
+    onSubmit: mode === 'edit' ? saveEdit : saveNew,
+    onCancel: () => {
+      if (mode === 'create') return dialog.close();
+      mode = 'detail';
+      refreshDetail();
+    },
+  });
+}
+
+function openCreate() {
+  openId = null;
+  current = null;
+  mode = 'create';
+  if (!dialog.open) dialog.showModal();
+  showForm();
+}
+
+const send = (method, path, body, version) =>
+  fetch(`${API_URL}${path}`, {
+    method,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      // Version lue par cet onglet : l'API refuse (409) si l'annonce a changé entre-temps.
+      ...(version !== undefined ? { 'If-Match': String(version ?? 'none') } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => null);
+
+const errorText = async (response) => (await response?.json().catch(() => null))?.error ?? '';
+
+async function saveNew(values) {
+  const response = await send('POST', '/listings', values);
+  if (response?.status === 201) {
+    const created = await response.json();
+    detailMessage = 'Annonce créée.';
+    mode = 'detail';
+    openId = created._id;
+    refreshDetail();
+    reload();
+  } else {
+    showForm(response ? `Création refusée (HTTP ${response.status}). ${await errorText(response)}` : 'Création impossible : API injoignable.');
+  }
+}
+
+async function saveEdit(changes) {
+  if (Object.keys(changes).length === 0) {
+    mode = 'detail';
+    detailMessage = 'Aucune modification.';
+    return refreshDetail();
+  }
+  const response = await send('PATCH', `/listings/${encodeURIComponent(current._id)}`, changes, current.version);
+  if (response?.status === 200) {
+    detailMessage = 'Modifications enregistrées.';
+    mode = 'detail';
+    refreshDetail();
+    reload();
+  } else if (response?.status === 409) {
+    showForm('Cette annonce a été modifiée ailleurs entre-temps : annulez pour relire la version actuelle, puis recommencez.');
+  } else if (response?.status === 404) {
+    mode = 'detail';
+    detailBody.textContent = 'Cette annonce n’existe plus.';
+  } else {
+    showForm(response ? `Enregistrement refusé (HTTP ${response.status}). ${await errorText(response)}` : 'Résultat incertain : relisez l’annonce avant de réessayer.');
+  }
+}
+
+async function removeListing() {
+  const response = await send('DELETE', `/listings/${encodeURIComponent(current._id)}`, null, current.version);
+  confirmDelete = false;
+  if (response?.status === 204) {
+    const name = current.name;
+    openId = null;
+    detailBody.textContent = 'Annonce supprimée.';
+    toast(`« ${name || 'Annonce sans titre'} » supprimée`);
+    reload();
+  } else {
+    detailMessage = response?.status === 409
+      ? 'Cette annonce a été modifiée ailleurs entre-temps : vérifiez-la avant de la supprimer.'
+      : 'Suppression impossible.';
+    refreshDetail();
+  }
+}
 
 // Seule la réponse du POST personnel confirme la réservation ; le flux SSE n'informe que de la disponibilité.
 async function reserve(id) {
@@ -211,6 +320,7 @@ next.addEventListener('click', () => { page += 1; loadListings(); });
 dialog.querySelector('.close').addEventListener('click', () => dialog.close());
 dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
 addTest.addEventListener('click', createTestListing);
+addListing.addEventListener('click', openCreate);
 
 // --- Temps réel : un seul flux par onglet ---
 let stream;

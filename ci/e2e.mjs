@@ -156,6 +156,52 @@ try {
   await C.waitFor('C voit la libération', `!${cardBooked(id)}`);
   ok('B fermé : l’action de A reste acceptée et C est actualisé');
 
+  // CRUD : création, modification visible en direct, conflit d'édition, suppression.
+  const name = `E2E CRUD ${Date.now()}`;
+  const fill = (values) => `(() => {
+    const form = document.querySelector('.edit-form');
+    for (const [k, v] of Object.entries(${JSON.stringify('__VALUES__')})) form.elements[k].value = v;
+    form.requestSubmit();
+    return true;
+  })()`;
+  const fillWith = (values) => fill().replace(JSON.stringify('__VALUES__'), JSON.stringify(values));
+  const message = (text) => `document.querySelector('.message')?.textContent.startsWith(${JSON.stringify(text)})`;
+  const priceOf = (n) => `[...document.querySelectorAll('#list li')].some((li) => li.querySelector('.card-title').textContent === ${JSON.stringify(name)} && li.textContent.includes('${n} $ / nuit'))`;
+
+  await C.eval(search(name));
+  await C.waitFor('C filtré sur le CRUD', `document.querySelector('#status').dataset.state === 'success'`);
+  await A.eval(`document.querySelector('#detail').close(); document.querySelector('#add-listing').click()`);
+  await A.waitFor('formulaire de création', `!!document.querySelector('.edit-form')`);
+  await A.eval(fillWith({ name, price: '120', 'address.market': 'Lyon', 'address.country': 'France' }));
+  await A.waitFor('création confirmée', message('Annonce créée.'));
+  await C.waitFor('C voit la nouvelle annonce', priceOf(120));
+  ok('CRUD : annonce créée dans A par le formulaire → visible dans C');
+
+  await A.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Modifier').click()`);
+  await A.eval(fillWith({ price: '150' }));
+  await A.waitFor('modification confirmée', message('Modifications enregistrées.'));
+  await C.waitFor('C voit le nouveau prix', priceOf(150));
+  ok('CRUD : prix modifié dans A → mis à jour dans C');
+
+  // Conflit : C ouvre le formulaire, A enregistre avant lui.
+  await C.eval(`[...document.querySelectorAll('#list li')].find((li) => li.querySelector('.card-title').textContent === ${JSON.stringify(name)}).querySelector('.card').click()`);
+  await C.waitFor('fiche C', `!!document.querySelector('.actions button')`);
+  await C.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Modifier').click()`);
+  await A.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Modifier').click()`);
+  await A.eval(fillWith({ price: '175' }));
+  await A.waitFor('A enregistre', message('Modifications enregistrées.'));
+  await C.eval(fillWith({ price: '160' }));
+  await C.waitFor('conflit signalé à C', message('Cette annonce a été modifiée ailleurs'));
+  await C.eval(`[...document.querySelectorAll('.edit-form button')].find((b) => b.textContent === 'Annuler').click()`);
+  await C.waitFor('C relit la version actuelle', `[...document.querySelectorAll('.facts dd')].some((dd) => dd.textContent === '175 $ / nuit')`);
+  ok('CRUD : édition concurrente refusée (409) dans C, qui relit la version de A');
+
+  await A.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Supprimer').click()`);
+  await A.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Confirmer la suppression').click()`);
+  await A.waitFor('suppression dans A', `document.querySelector('#detail-body').textContent === 'Annonce supprimée.'`);
+  await C.waitFor('C voit la suppression', `document.querySelector('#detail-body').textContent === 'Cette annonce n’existe plus.' && !(${priceOf(175)})`);
+  ok('CRUD : suppression confirmée dans A → fiche et carte retirées dans C');
+
   // Recharger plusieurs fois : une seule connexion SSE par chargement de page.
   for (let i = 0; i < 3; i++) await C.goto(url);
   await C.waitFor('C reconnecté', live);

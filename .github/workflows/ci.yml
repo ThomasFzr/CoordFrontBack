@@ -3,16 +3,48 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    # Relevé quotidien du baromètre (03:00 UTC), même sans push.
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       min_rps:
         description: Capacité minimale attendue (req/s) avant alerte
         default: "300"
 
+# Un nouveau push annule le run encore en cours sur la même branche : seul le dernier commit est testé.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   MIN_RPS: ${{ inputs.min_rps || vars.MIN_RPS || '300' }}
 
 jobs:
+  # Le baromètre ne se relance au push que si ce qui influence la charge a changé.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      perf: ${{ steps.diff.outputs.perf }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "${{ github.event_name }}" != push ] || [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "perf=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          echo "$changed"
+          if grep -qE '^(app/|k6/|ci/(barometre|env|seed)|\.github/workflows/)' <<<"$changed"; then
+            echo "perf=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "perf=false" >> "$GITHUB_OUTPUT"
+          fi
+
   pipeline:
     runs-on: ubuntu-latest
     permissions:
@@ -65,8 +97,12 @@ jobs:
           echo "### Image publiée : \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
 
   barometre:
-    needs: pipeline
-    if: github.event_name != 'pull_request'
+    needs: [changes, pipeline]
+    # Nuit, lancement manuel, ou push qui touche l'API, k6 ou la CI ; jamais sur une pull request.
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && needs.changes.outputs.perf == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
