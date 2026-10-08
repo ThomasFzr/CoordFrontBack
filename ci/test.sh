@@ -27,9 +27,15 @@ total() { curl -sf -G "$API/listings" --data-urlencode "q=$1" | jq -r .total; }
 [ "$(total fictive)" = 45 ] || fail "recherche dans summary"
 [ "$(total 'pórto')" = 12 ] || fail "recherche insensible aux accents"
 [ "$(total 'PORTO')" = 12 ] || fail "recherche insensible à la casse"
-[ "$(total '(')" = 0 ] || fail "caractère spécial échappé, pas d'erreur"
-[ "$(total '.*')" = 0 ] || fail "saisie jamais interprétée comme regex"
-ok "recherche : plusieurs champs, tous les mots, accents, casse, caractères spéciaux échappés"
+[ "$(total 'a.*b')" = 0 ] || fail "saisie jamais interprétée comme regex"
+# Normalisation : espaces, ponctuation en bordure, doublons, Unicode décomposé, saisie vide.
+[ "$(total '   porto   ')" = 12 ] || fail "espaces autour ignorés"
+[ "$(total "$(printf '\tbarcelona\n  apartment ')")" = 3 ] || fail "tabulations et retours à la ligne"
+[ "$(total '(porto), porto!')" = 12 ] || fail "ponctuation en bordure et mot en double ignorés"
+[ "$(total "$(printf 'po\xcc\x81rto')")" = 12 ] || fail "Unicode décomposé (o + accent) normalisé"
+[ "$(total '   ')" = 45 ] || fail "saisie faite d'espaces = pas de recherche"
+[ "$(total '(')" = 45 ] || fail "saisie faite de ponctuation = pas de recherche"
+ok "recherche : plusieurs champs, tous les mots, accents, casse, saisie échappée et normalisée (trim, ponctuation, doublons, Unicode)"
 
 [ "$(curl -sf "$API/listings/ci-001" | jq -r .name)" = "Logement CI 1" ] || fail "détail ci-001"
 [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/listings/inconnu")" = 404 ] || fail "404 attendu"

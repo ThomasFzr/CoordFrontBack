@@ -60,9 +60,26 @@ function wordPattern(word) {
     .join('');
 }
 
+// Normalisation de la recherche (même règle dans l'API et le front) :
+// Unicode composé (é saisi « e + ◌́ » = é), espaces et caractères de contrôle réduits, ponctuation retirée
+// en bordure de mot (« porto, » → « porto »), mots vides ou en double ignorés, longueurs bornées.
+function normalizeQuery(q) {
+  const seen = new Set();
+  const words = [];
+  for (const raw of String(q ?? '').normalize('NFC').slice(0, 200).split(/[\s\p{Cc}]+/u)) {
+    const word = raw.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '').slice(0, 50);
+    const key = word.toLowerCase();
+    if (!word || seen.has(key)) continue;
+    seen.add(key);
+    words.push(word);
+    if (words.length === 8) break;
+  }
+  return words;
+}
+
 // Chaque mot doit apparaître dans au moins un des champs (ET entre les mots, OU entre les champs).
 function searchFilter(q) {
-  const words = String(q).trim().slice(0, 100).split(/\s+/).filter(Boolean).slice(0, 8);
+  const words = normalizeQuery(q);
   if (!words.length) return {};
   return {
     $and: words.map((word) => {
@@ -163,7 +180,7 @@ app.get('/listings', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
 
-  const filter = req.query.q ? searchFilter(req.query.q) : {};
+  const filter = searchFilter(req.query.q);
   if (req.query.property_type) filter.property_type = req.query.property_type;
   if (req.query.country) filter['address.country'] = req.query.country;
   if (req.query.market) filter['address.market'] = req.query.market;

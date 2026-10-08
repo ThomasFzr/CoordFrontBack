@@ -1,4 +1,4 @@
-import { renderCards, renderDetail, renderForm, validateListing, validatePage } from './view.js';
+import { normalizeQuery, renderCards, renderDetail, renderForm, validateListing, validatePage } from './view.js';
 
 // Même origine : nginx relaie /api vers l'API (pas de CORS, pas de port en dur).
 const API_URL = '/api';
@@ -88,7 +88,10 @@ async function reload() {
     while (dirty && !stopped) {
       dirty = false;
       const params = new URLSearchParams({ page, limit: LIMIT });
-      for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
+      for (const [key, value] of new FormData(form)) {
+        const clean = key === 'q' ? normalizeQuery(value).join(' ') : value.trim();
+        if (clean) params.set(key, clean);
+      }
       const payload = validatePage(await getJson(`/listings?${params}`));
       if (stopped) return;
       // Une demande plus récente (filtre, frappe, événement) est arrivée pendant la lecture :
@@ -315,6 +318,10 @@ async function createTestListing() {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   clearTimeout(typing);
+  // À la validation, le champ affiche la recherche telle qu'elle est réellement faite.
+  const q = normalizeQuery(form.elements.q.value).join(' ');
+  form.elements.q.value = q;
+  searched = q;
   page = 1;
   loadListings();
 });
@@ -323,9 +330,14 @@ form.addEventListener('submit', (event) => {
 // pendant la recherche. reload() est sérialisée : la dernière saisie l'emporte toujours.
 const SEARCH_DELAY_MS = 250;
 let typing;
+let searched = ''; // dernière recherche normalisée envoyée
 form.elements.q.addEventListener('input', () => {
   clearTimeout(typing);
   typing = setTimeout(() => {
+    // Un espace, une virgule ou une majuscule en plus ne change pas la recherche : pas de requête.
+    const q = normalizeQuery(form.elements.q.value).join(' ');
+    if (q.toLowerCase() === searched.toLowerCase()) return;
+    searched = q;
     page = 1;
     setStatus('loading', 'Recherche…');
     reload();

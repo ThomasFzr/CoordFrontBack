@@ -167,6 +167,20 @@ try {
     return document.querySelector('#status').textContent.startsWith('11 annonces') && places.length > 0 && places.every((p) => p.includes('Barcelona'));
   })()`);
   ok('recherche réactive : résultats à la frappe, sans valider, sur la ville (Barcelona)');
+
+  // Espaces et ponctuation ajoutés en fin de saisie : même recherche normalisée, aucune requête envoyée.
+  const searches = `performance.getEntriesByType('resource').filter((e) => e.name.includes('/api/listings?')).length`;
+  const sent = await B.eval(searches);
+  await B.eval(`(async () => {
+    const q = document.querySelector('#filters').q;
+    for (const char of '  , ') { q.value += char; q.dispatchEvent(new Event('input')); await new Promise((r) => setTimeout(r, 60)); }
+    q.value = q.value.toUpperCase(); q.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 600));
+    return true;
+  })()`);
+  const after = await B.eval(searches);
+  if (after !== sent) throw new Error(`${after - sent} requête(s) envoyée(s) pour une recherche inchangée`);
+  ok('recherche normalisée : espaces, virgule et majuscules en plus n’envoient aucune requête');
   await B.eval(search('Annonce de test'));
 
   // Un nouvel onglet obtient l'état courant à sa connexion.

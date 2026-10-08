@@ -1,3 +1,20 @@
+// Normalisation de la recherche (même règle dans l'API et le front) :
+// Unicode composé (é saisi « e + ◌́ » = é), espaces et caractères de contrôle réduits, ponctuation retirée
+// en bordure de mot (« porto, » → « porto »), mots vides ou en double ignorés, longueurs bornées.
+export function normalizeQuery(q) {
+  const seen = new Set();
+  const words = [];
+  for (const raw of String(q ?? '').normalize('NFC').slice(0, 200).split(/[\s\p{Cc}]+/u)) {
+    const word = raw.replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '').slice(0, 50);
+    const key = word.toLowerCase();
+    if (!word || seen.has(key)) continue;
+    seen.add(key);
+    words.push(word);
+    if (words.length === 8) break;
+  }
+  return words;
+}
+
 const isText = (value) => typeof value === 'string' && value.trim() !== '';
 
 // Contrat : _id texte non vide, name chaîne (vide dans 8 annonces de sample_airbnb, donc accepté).
