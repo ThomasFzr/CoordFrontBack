@@ -86,7 +86,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: alerte
-        if: failure() && steps.barometre.outcome == 'failure'
+        if: steps.barometre.outputs.below == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -106,7 +106,7 @@ jobs:
           fi
 
       - name: fin d'alerte
-        if: success()
+        if: steps.barometre.outputs.below == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

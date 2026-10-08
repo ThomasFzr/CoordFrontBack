@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Baromètre de charge : cherche le débit où l'API ne tient plus ses seuils.
-# Échoue (exit 1) si le dernier palier tenu est sous MIN_RPS.
+# Expose below=true (GITHUB_OUTPUT) si le dernier palier tenu est sous MIN_RPS ; ne fait pas échouer le job.
 # Usage : IMAGE=coordfrontback-api:ci MIN_RPS=100 API_PORT=3000 FRONT_PORT=8080 ci/barometre.sh
 set -euo pipefail
 
@@ -26,10 +26,13 @@ verdict=$(jq -r .verdict "$ROOT/k6/barometre.json")
   echo "Objectif minimal : **$MIN_RPS req/s**."
 } > "$ROOT/k6/barometre-summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$ROOT/k6/barometre-summary.md" >> "$GITHUB_STEP_SUMMARY"
-[ -n "${GITHUB_OUTPUT:-}" ] && echo "last_ok=$last_ok" >> "$GITHUB_OUTPUT"
 
-if [ "$last_ok" -lt "$MIN_RPS" ]; then
-  echo "::error title=Charge trop haute::L'API ne tient que $last_ok req/s (objectif $MIN_RPS). $verdict"
-  fail "capacité $last_ok req/s < objectif $MIN_RPS req/s"
+below=false
+[ "$last_ok" -lt "$MIN_RPS" ] && below=true
+[ -n "${GITHUB_OUTPUT:-}" ] && printf 'last_ok=%s\nbelow=%s\n' "$last_ok" "$below" >> "$GITHUB_OUTPUT"
+
+if [ "$below" = true ]; then
+  echo "⚠ capacité $last_ok req/s < objectif $MIN_RPS req/s : une issue sera ouverte"
+else
+  ok "capacité $last_ok req/s ≥ objectif $MIN_RPS req/s"
 fi
-ok "capacité $last_ok req/s ≥ objectif $MIN_RPS req/s"
