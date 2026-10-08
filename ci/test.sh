@@ -76,7 +76,7 @@ done
 ok "front servi (HTML + modules JS)"
 
 # --- Charge (smoke k6) ---
-docker run --rm --network host -v "$ROOT/k6:/k6" -e BASE_URL="$API" \
+docker run --rm --network host --user "$(id -u):$(id -g)" -v "$ROOT/k6:/k6" -e BASE_URL="$API" \
   -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_EXPORT=/k6/rapport-ci.html \
   grafana/k6 run --quiet --vus 5 --duration 20s /k6/load.js
 ok "k6 smoke"
