@@ -32,7 +32,8 @@ ci_up() {
     ${API_CPUS:+--cpus "$API_CPUS"} ${API_MEMORY:+--memory "$API_MEMORY"} \
     -e MONGO_URI=mongodb://ci-mongo:27017 "$IMAGE" >/dev/null
   docker run -d --name ci-front -p "$FRONT_PORT:80" \
-    -v "$ROOT/front:/usr/share/nginx/html:ro" nginx:alpine >/dev/null
+    -v "$ROOT/front:/usr/share/nginx/html:ro" \
+    -v "$ROOT/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
 
   for i in $(seq 1 30); do
     curl -sf "$API/health" | grep -q UP && break

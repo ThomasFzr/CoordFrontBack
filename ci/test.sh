@@ -52,6 +52,7 @@ curl -sf "http://localhost:$FRONT_PORT/" | grep -q 'src="app.js"' || fail "index
 for f in app.js view.js; do
   curl -sfI "http://localhost:$FRONT_PORT/$f" | grep -qi 'content-type: application/javascript' || fail "$f MIME"
 done
+curl -sfI "http://localhost:$FRONT_PORT/app.js" | grep -qi 'cache-control: no-cache' || fail "front : Cache-Control no-cache"
 ok "front servi (HTML + modules JS)"
 
 # --- Charge (smoke k6) ---

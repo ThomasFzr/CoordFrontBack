@@ -33,7 +33,7 @@ printf 'FROM alpine:3\nCMD ["false"]\n' | docker build -q -t "$IMAGE_REPO:broken
 cd "$WORK" # aucun .env du projet ne doit être chargé : scripts/ est appelé par chemin absolu
 cp "$ROOT/compose.yaml" "$ROOT/compose.prod.yaml" "$WORK/"
 mkdir -p "$WORK/scripts" && cp "$ROOT"/scripts/*.sh "$WORK/scripts/"
-cp -r "$ROOT/front" "$ROOT/app" "$WORK/"
+cp -r "$ROOT/front" "$ROOT/app" "$ROOT/nginx" "$WORK/"
 
 "$WORK/scripts/deploy.sh" v1
 curl -sf -X POST -H 'Content-Type: application/json' "$API/listings" \
