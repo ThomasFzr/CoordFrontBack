@@ -1,0 +1,19 @@
+# Surcouche de production : l'API vient d'une image publiée (API_IMAGE), les données restent dans le volume.
+# docker compose -f compose.yaml -f compose.prod.yaml up -d   (utilisé par scripts/deploy.sh)
+services:
+  api:
+    image: ${API_IMAGE:?API_IMAGE requis, ex. ghcr.io/thomasfzr/coordfrontback-api:<sha>}
+    build: !reset null
+    develop: !reset null
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+
+  front:
+    restart: unless-stopped
+
+  mongo:
+    restart: unless-stopped
+    ports: !reset []

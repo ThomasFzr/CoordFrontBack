@@ -40,6 +40,9 @@ jobs:
       - name: test
         run: IMAGE=coordfrontback-api:ci ci/test.sh
 
+      - name: rollback
+        run: IMAGE=coordfrontback-api:ci ci/rollback.sh
+
       - name: k6 report
         if: always()
         uses: actions/upload-artifact@v4
