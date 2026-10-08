@@ -1,3 +1,6 @@
 .env
 node_modules
 k6/rapport*.html
+k6/barometre*.md
+k6/barometre.json
+k6/barometre.html

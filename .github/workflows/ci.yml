@@ -3,6 +3,14 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      min_rps:
+        description: Capacité minimale attendue (req/s) avant alerte
+        default: "300"
+
+env:
+  MIN_RPS: ${{ inputs.min_rps || vars.MIN_RPS || '300' }}
 
 jobs:
   pipeline:
@@ -48,3 +56,60 @@ jobs:
           docker tag coordfrontback-api:ci "$IMAGE"
           docker push "$IMAGE"
           echo "### Image publiée : \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+
+  barometre:
+    needs: pipeline
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: build
+        run: docker build --target prod -t coordfrontback-api:ci app
+
+      - name: barometre
+        id: barometre
+        run: IMAGE=coordfrontback-api:ci ci/barometre.sh
+
+      - name: rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-barometre
+          path: |
+            k6/barometre.html
+            k6/barometre.json
+            k6/barometre.md
+          if-no-files-found: ignore
+
+      - name: alerte
+        if: failure() && steps.barometre.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Alerte charge : capacité sous ${MIN_RPS} req/s"
+          {
+            echo "Le baromètre k6 du commit ${GITHUB_SHA::7} est passé sous l'objectif."
+            echo
+            [ -f k6/barometre-summary.md ] && cat k6/barometre-summary.md
+            echo
+            echo "Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > alerte.md
+          ISSUE=$(gh issue list --state open --search "Alerte charge in:title" --json number --jq '.[0].number')
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --body-file alerte.md
+          else
+            gh issue create --title "$TITLE" --body-file alerte.md
+          fi
+
+      - name: fin d'alerte
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --state open --search "Alerte charge in:title" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Capacité revenue au-dessus de ${MIN_RPS} req/s (commit ${GITHUB_SHA::7})."
+          done
