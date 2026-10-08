@@ -6,3 +6,5 @@ k6/barometre.json
 k6/barometre.html
 .deploy/
 backups/
+k6/palier.json
+k6/barometre.jsonl

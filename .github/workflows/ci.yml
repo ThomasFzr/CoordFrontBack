@@ -83,7 +83,6 @@ jobs:
         with:
           name: k6-barometre
           path: |
-            k6/barometre.html
             k6/barometre.json
             k6/barometre.md
           if-no-files-found: ignore
