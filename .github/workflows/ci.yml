@@ -88,6 +88,25 @@ jobs:
             k6/barometre.md
           if-no-files-found: ignore
 
+      - name: relevé dans Issues
+        if: steps.barometre.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Relevé du commit ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M UTC'))"
+            echo
+            cat k6/barometre-summary.md
+            echo
+            echo "Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > releve.md
+          ISSUE=$(gh issue list --state open --search "Baromètre de charge in:title" --json number --jq '.[0].number')
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --body-file releve.md
+          else
+            gh issue create --title "Baromètre de charge" --body-file releve.md
+          fi
+
       - name: alerte
         if: steps.barometre.outputs.below == 'true'
         env:

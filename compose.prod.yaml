@@ -10,6 +10,7 @@ services:
     cap_drop:
       - ALL
     mem_limit: 256m
+    cpus: 1
 
   front:
     restart: unless-stopped

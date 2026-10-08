@@ -24,10 +24,12 @@ ci_up() {
   docker run -d --name ci-mongo --network ci-net \
     --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\")'" --health-interval 2s mongo:8 >/dev/null
   until [ "$(docker inspect -f '{{.State.Health.Status}}' ci-mongo)" = healthy ]; do sleep 2; done
-  docker run --rm --network ci-net -v "$ROOT/ci/seed.js:/seed.js:ro" mongo:8 \
+  docker run --rm --network ci-net -e SEED_COUNT="${SEED_COUNT:-45}" -v "$ROOT/ci/seed.js:/seed.js:ro" mongo:8 \
     mongosh --quiet mongodb://ci-mongo:27017 /seed.js
 
+  # API_CPUS / API_MEMORY : mêmes limites qu'en production pour le baromètre.
   docker run -d --name ci-api --network ci-net -p "$API_PORT:3000" \
+    ${API_CPUS:+--cpus "$API_CPUS"} ${API_MEMORY:+--memory "$API_MEMORY"} \
     -e MONGO_URI=mongodb://ci-mongo:27017 "$IMAGE" >/dev/null
   docker run -d --name ci-front -p "$FRONT_PORT:80" \
     -v "$ROOT/front:/usr/share/nginx/html:ro" nginx:alpine >/dev/null

@@ -5,7 +5,7 @@ import exec from 'k6/execution';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const STEP_SECONDS = Number(__ENV.STEP_SECONDS || 15);
-const LEVELS = (__ENV.LEVELS || '50,100,200,400,600,800,1000,1500,2000,3000,4000').split(',').map(Number);
+const LEVELS = (__ENV.LEVELS || '50,100,200,300,400,600,800,1000,1300,1600,2000,2500,3000,4000,5000').split(',').map(Number);
 const SLO = { p95: Number(__ENV.SLO_P95 || 500), errorRate: Number(__ENV.SLO_ERRORS || 0.01), served: 0.85 };
 
 const thresholds = {

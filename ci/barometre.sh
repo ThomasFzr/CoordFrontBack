@@ -5,6 +5,8 @@
 set -euo pipefail
 
 MIN_RPS=${MIN_RPS:-100}
+# Conditions proches de la prod : 1 CPU, 256 Mo (compose.prod.yaml), volume de la vraie base.
+export API_CPUS=${API_CPUS:-1} API_MEMORY=${API_MEMORY:-256m} SEED_COUNT=${SEED_COUNT:-5000}
 
 . "$(dirname "$0")/env.sh"
 ci_up
@@ -23,7 +25,7 @@ last_ok=$(jq -r '.lastOkRate // 0' "$ROOT/k6/barometre.json")
 verdict=$(jq -r .verdict "$ROOT/k6/barometre.json")
 {
   cat "$ROOT/k6/barometre.md"
-  echo "Objectif minimal : **$MIN_RPS req/s**."
+  echo "Conditions : API limitée à $API_CPUS CPU et $API_MEMORY, $SEED_COUNT annonces avec avis. Objectif minimal : **$MIN_RPS req/s**."
 } > "$ROOT/k6/barometre-summary.md"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$ROOT/k6/barometre-summary.md" >> "$GITHUB_STEP_SUMMARY"
 
