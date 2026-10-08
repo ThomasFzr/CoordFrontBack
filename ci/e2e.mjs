@@ -59,11 +59,13 @@ async function openTab(url) {
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
   let id = 0;
   const pending = new Map();
-  const tab = { target, eventSources: 0, errors: [] };
+  // Connexions EventSource encore ouvertes (une reconnexion remplace la précédente, elle ne s'y ajoute pas).
+  const tab = { target, openStreams: new Map(), loaderId: null, errors: [] };
   ws.onmessage = ({ data }) => {
     const m = JSON.parse(data);
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-    if (m.method === 'Network.requestWillBeSent' && m.params.type === 'EventSource') tab.eventSources++;
+    if (m.method === 'Network.requestWillBeSent' && m.params.type === 'EventSource') tab.openStreams.set(m.params.requestId, m.params.loaderId);
+    if (m.method === 'Network.loadingFinished' || m.method === 'Network.loadingFailed') tab.openStreams.delete(m.params.requestId);
     if (m.method === 'Runtime.exceptionThrown') tab.errors.push(m.params.exceptionDetails.exception?.description);
   };
   tab.send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
@@ -81,8 +83,9 @@ async function openTab(url) {
     throw new Error(`délai dépassé : ${label}`);
   };
   tab.goto = async (u) => {
-    tab.eventSources = 0;
-    await tab.send('Page.navigate', { url: u });
+    tab.openStreams.clear();
+    const { result } = await tab.send('Page.navigate', { url: u });
+    tab.loaderId = result?.loaderId ?? null;
     await tab.waitFor('page chargée', `document.readyState === 'complete' && !!document.querySelector('#live')`);
   };
   tab.close = () => fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`).then((r) => r.text());
@@ -206,8 +209,12 @@ try {
   for (let i = 0; i < 3; i++) await C.goto(url);
   await C.waitFor('C reconnecté', live);
   await sleep(1000);
-  if (C.eventSources !== 1) throw new Error(`${C.eventSources} connexions SSE après rechargement (1 attendue)`);
-  ok('après plusieurs rechargements, une seule connexion SSE dans l’onglet');
+  // Seules comptent les connexions du document affiché (la page précédente est déchargée).
+  const streams = [...C.openStreams.values()].filter((loader) => loader === C.loaderId).length;
+  if (streams !== 1) {
+    throw new Error(`${streams} connexions SSE ouvertes après rechargement (1 attendue) ; détail ${JSON.stringify([...C.openStreams.values()])} / ${C.loaderId}`);
+  }
+  ok('après plusieurs rechargements, une seule connexion SSE reste ouverte dans l’onglet');
 
   // Coupure réelle : redémarrage de l'API, puis reconnexion et relecture.
   await C.eval(search('Annonce de test'));
