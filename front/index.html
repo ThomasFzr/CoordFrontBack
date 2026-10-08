@@ -10,6 +10,7 @@
 <body>
   <header class="topbar">
     <h1>Listings</h1>
+    <span id="live" class="live" data-state="off" role="status">Connexion…</span>
     <form id="filters" class="filters" autocomplete="off">
       <input name="q" type="search" placeholder="Rechercher un nom…" aria-label="Recherche par nom">
       <select name="country" aria-label="Pays">
@@ -52,6 +53,8 @@
       <button id="next" type="button">Suivant →</button>
     </nav>
   </main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <dialog id="detail" class="detail">
     <button class="close" type="button" aria-label="Fermer">×</button>

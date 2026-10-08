@@ -143,6 +143,49 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
 .reviews { padding: 0; list-style: none; display: grid; gap: 12px; }
 .reviews p { margin: 4px 0 0; color: var(--muted); line-height: 1.45; }
 
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .8rem;
+  color: var(--muted);
+}
+.live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.live[data-state="on"]::before { background: #2fb344; box-shadow: 0 0 0 3px rgb(47 179 68 / .2); }
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 6px 18px rgb(0 0 0 / .2);
+  animation: toast-in .2s ease-out;
+}
+.toast button { padding: 4px 10px; background: transparent; color: inherit; border-color: currentColor; }
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
+
+.flash .card { animation: flash 1.5s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } }
+
 @media (max-width: 600px) {
   .topbar, main { padding-left: 16px; padding-right: 16px; }
 }

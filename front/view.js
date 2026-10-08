@@ -38,33 +38,34 @@ function image(listing) {
 }
 
 export function renderCards(listings, list, onSelect) {
-  list.replaceChildren(
-    ...listings.map((listing) => {
-      const item = el('li');
-      const card = el('button', 'card');
-      card.type = 'button';
-      card.addEventListener('click', () => onSelect(listing._id));
+  list.replaceChildren(...listings.map((listing) => renderCard(listing, onSelect)));
+}
 
-      const rating = listing.review_scores?.review_scores_rating;
-      const place = [listing.address?.market, listing.address?.country].filter(Boolean).join(', ');
+export function renderCard(listing, onSelect) {
+  const item = el('li');
+  item.dataset.id = listing._id;
+  const card = el('button', 'card');
+  card.type = 'button';
+  card.addEventListener('click', () => onSelect(listing._id));
 
-      const body = el('div', 'card-body');
-      body.append(
-        el('span', 'card-place', place || 'Lieu inconnu'),
-        el('span', 'card-title', listing.name),
-        el('span', 'card-meta', `${listing.property_type ?? '—'} · ${listing.accommodates ?? '?'} pers. · ${listing.bedrooms ?? '?'} ch.`),
-        el('span', 'card-footer', ''),
-      );
-      body.lastChild.append(
-        el('strong', '', formatPrice(listing.price)),
-        el('span', 'rating', typeof rating === 'number' ? `★ ${rating}` : 'Pas de note'),
-      );
+  const rating = listing.review_scores?.review_scores_rating;
+  const place = [listing.address?.market, listing.address?.country].filter(Boolean).join(', ');
 
-      card.append(image(listing), body);
-      item.append(card);
-      return item;
-    }),
+  const body = el('div', 'card-body');
+  body.append(
+    el('span', 'card-place', place || 'Lieu inconnu'),
+    el('span', 'card-title', listing.name),
+    el('span', 'card-meta', `${listing.property_type ?? '—'} · ${listing.accommodates ?? '?'} pers. · ${listing.bedrooms ?? '?'} ch.`),
+    el('span', 'card-footer', ''),
   );
+  body.lastChild.append(
+    el('strong', '', formatPrice(listing.price)),
+    el('span', 'rating', typeof rating === 'number' ? `★ ${rating}` : 'Pas de note'),
+  );
+
+  card.append(image(listing), body);
+  item.append(card);
+  return item;
 }
 
 export function renderDetail(listing, container) {

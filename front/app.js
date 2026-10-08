@@ -1,4 +1,4 @@
-import { renderCards, renderDetail, validateListing, validatePage } from './view.js';
+import { renderCard, renderCards, renderDetail, validateListing, validatePage } from './view.js';
 
 const API_URL = `${location.protocol}//${location.hostname}:3000`;
 const LIMIT = 12;
@@ -11,6 +11,8 @@ const next = document.querySelector('#next');
 const pageInfo = document.querySelector('#page-info');
 const dialog = document.querySelector('#detail');
 const detailBody = document.querySelector('#detail-body');
+const live = document.querySelector('#live');
+const toasts = document.querySelector('#toasts');
 
 let page = 1;
 let pages = 1;
@@ -61,7 +63,61 @@ async function openDetail(id) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   page = 1;
-  loadListings();
+  // --- Temps réel (SSE) ---
+function toast(text, action) {
+  const item = document.createElement('div');
+  item.className = 'toast';
+  item.textContent = text;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = action.label;
+    button.addEventListener('click', () => { action.run(); item.remove(); });
+    item.append(button);
+  }
+  toasts.append(item);
+  setTimeout(() => item.remove(), 6000);
+}
+
+const cardOf = (id) => [...list.children].find((li) => li.dataset.id === id);
+
+function onEvent(handler) {
+  return (event) => {
+    try {
+      handler(JSON.parse(event.data));
+    } catch (error) {
+      console.warn('Événement SSE ignoré :', error.message, event.data);
+    }
+  };
+}
+
+const events = new EventSource(`${API_URL}/events`);
+events.addEventListener('open', () => { live.dataset.state = 'on'; live.textContent = 'En direct'; });
+events.addEventListener('error', () => { live.dataset.state = 'off'; live.textContent = 'Reconnexion…'; });
+
+events.addEventListener('created', onEvent((data) => {
+  const listing = validateListing(data);
+  toast(`Nouvelle annonce : ${listing.name}`, { label: 'Voir', run: () => openDetail(listing._id) });
+}));
+
+events.addEventListener('updated', onEvent((data) => {
+  const listing = validateListing(data);
+  const card = cardOf(listing._id);
+  if (card) {
+    const fresh = renderCard(listing, openDetail);
+    fresh.classList.add('flash');
+    card.replaceWith(fresh);
+  }
+  toast(`Annonce modifiée : ${listing.name}`);
+}));
+
+events.addEventListener('deleted', onEvent((data) => {
+  if (typeof data?._id !== 'string') throw new Error('Réponse incompatible avec le contrat attendu.');
+  cardOf(data._id)?.remove();
+  toast(`Annonce supprimée : ${data._id}`);
+}));
+
+loadListings();
 });
 prev.addEventListener('click', () => { page -= 1; loadListings(); });
 next.addEventListener('click', () => { page += 1; loadListings(); });

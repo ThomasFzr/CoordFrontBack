@@ -22,6 +22,11 @@ ok "GET /listings?country="
 [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/listings/inconnu")" = 404 ] || fail "404 attendu"
 ok "GET /listings/:id (200 et 404)"
 
+# --- SSE : chaque écriture est diffusée sur /events ---
+sse=$(mktemp)
+curl -sN --max-time 6 "$API/events" > "$sse" &
+sse_pid=$!
+sleep 1
 # --- Écritures (sur la base jetable uniquement) ---
 code() { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' "$@"; }
 [ "$(code -X POST "$API/listings" -d '{"_id":"ci-new","name":"Créé en CI"}')" = 201 ] || fail "POST 201"
@@ -33,6 +38,14 @@ code() { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/js
 [ "$(code -X DELETE "$API/listings/ci-new")" = 204 ] || fail "DELETE 204"
 [ "$(code -X DELETE "$API/listings/ci-new")" = 404 ] || fail "DELETE 404"
 ok "POST / PATCH / PUT / DELETE"
+
+wait $sse_pid || true
+grep -q '^event: ready' "$sse" || fail "SSE : événement ready absent"
+for e in created updated deleted; do grep -q "^event: $e" "$sse" || fail "SSE : événement $e absent"; done
+grep -A1 '^event: created' "$sse" | grep -q '"_id":"ci-new"' || fail "SSE : données de created"
+[ "$(grep -c '^event: updated' "$sse")" = 2 ] || fail "SSE : 2 updated attendus (PATCH + PUT)"
+ok "SSE /events (ready, created, updated ×2, deleted)"
+rm -f "$sse"
 
 # --- Front ---
 curl -sf "http://localhost:$FRONT_PORT/" | grep -q 'src="app.js"' || fail "index.html"
