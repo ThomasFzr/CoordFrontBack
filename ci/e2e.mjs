@@ -165,6 +165,7 @@ try {
 } catch (error) {
   failed = true;
   console.log(`✗ navigateur : ${error.message}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::error title=e2e::${error.message}`);
 } finally {
   await cleanup();
 }

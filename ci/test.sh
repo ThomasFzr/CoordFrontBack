@@ -82,7 +82,7 @@ ok "front servi (HTML, modules JS, /api relayé)"
 
 # --- Navigateur : deux onglets synchronisés par SSE (voir ci/e2e.mjs) ---
 if [ -n "${CHROME:-}" ] || [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ] || command -v google-chrome >/dev/null; then
-  node "$ROOT/ci/e2e.mjs" "$FRONT"
+  node "$ROOT/ci/e2e.mjs" "$FRONT" || fail "test navigateur"
 else
   echo "⚠ Chrome absent : test navigateur ignoré"
 fi

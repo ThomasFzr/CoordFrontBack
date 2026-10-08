@@ -15,7 +15,12 @@ ci_down() {
   exit $status
 }
 
-fail() { echo "✗ $1"; exit 1; }
+fail() {
+  echo "✗ $1"
+  # Dans GitHub Actions, l'échec devient une annotation visible sur le run.
+  [ -n "${GITHUB_ACTIONS:-}" ] && echo "::error title=ci::$1"
+  exit 1
+}
 ok() { echo "✓ $1"; }
 
 ci_up() {
