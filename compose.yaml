@@ -1,0 +1,51 @@
+services:
+  api:
+    build:
+      context: ./app
+      target: dev
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017}
+      MONGO_DB: ${MONGO_DB:-sample_airbnb}
+      MONGO_COLLECTION: ${MONGO_COLLECTION:-listingsAndReviews}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      mongo:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./app/src
+          target: /app/src
+        - action: rebuild
+          path: ./app/package.json
+
+  front:
+    image: nginx:alpine
+    ports:
+      - "${FRONT_PORT:-8080}:80"
+    volumes:
+      - ./front:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+
+  mongo:
+    image: mongo:8
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  mongodata:

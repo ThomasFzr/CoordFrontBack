@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listings</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Listings</h1>
+    <form id="filters" class="filters" autocomplete="off">
+      <input name="q" type="search" placeholder="Rechercher un nom…" aria-label="Recherche par nom">
+      <select name="country" aria-label="Pays">
+        <option value="">Tous les pays</option>
+        <option>Australia</option>
+        <option>Brazil</option>
+        <option>Canada</option>
+        <option>China</option>
+        <option>Hong Kong</option>
+        <option>Portugal</option>
+        <option>Spain</option>
+        <option>Turkey</option>
+        <option>United States</option>
+      </select>
+      <select name="property_type" aria-label="Type de logement">
+        <option value="">Tous les types</option>
+        <option>Apartment</option>
+        <option>House</option>
+        <option>Condominium</option>
+        <option>Serviced apartment</option>
+        <option>Loft</option>
+        <option>Townhouse</option>
+        <option>Guest suite</option>
+        <option>Bed and breakfast</option>
+        <option>Boutique hotel</option>
+        <option>Guesthouse</option>
+        <option>Hostel</option>
+        <option>Villa</option>
+      </select>
+      <button type="submit">Filtrer</button>
+    </form>
+  </header>
+
+  <main>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <ul id="list" class="grid"></ul>
+    <nav class="pager" aria-label="Pagination">
+      <button id="prev" type="button">← Précédent</button>
+      <span id="page-info"></span>
+      <button id="next" type="button">Suivant →</button>
+    </nav>
+  </main>
+
+  <dialog id="detail" class="detail">
+    <button class="close" type="button" aria-label="Fermer">×</button>
+    <div id="detail-body"></div>
+  </dialog>
+</body>
+</html>
