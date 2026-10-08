@@ -16,8 +16,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const profile = mkdtempSync(join(tmpdir(), 'e2e-chrome-'));
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
-  '--no-first-run', '--no-default-browser-check', '--no-sandbox', 'about:blank',
-], { stdio: 'ignore' });
+  '--no-first-run', '--no-default-browser-check', '--no-sandbox',
+  '--disable-gpu', '--disable-dev-shm-usage', 'about:blank',
+], { stdio: ['ignore', 'ignore', 'pipe'] });
+let chromeLog = '';
+chrome.stderr.on('data', (chunk) => { chromeLog = (chromeLog + chunk).slice(-2000); });
+chrome.on('error', (error) => { chromeLog += `\nlancement impossible : ${error.message}`; });
 
 let failed = false;
 const ok = (msg) => console.log(`✓ ${msg}`);
@@ -33,14 +37,19 @@ async function cleanup() {
 }
 
 async function cdp(path, method = 'GET') {
-  for (let i = 0; i < 50; i++) {
+  const end = Date.now() + 30_000;
+  let last;
+  while (Date.now() < end) {
+    if (chrome.exitCode !== null) break;
     try {
       return await (await fetch(`http://127.0.0.1:${PORT}${path}`, { method })).json();
-    } catch {
-      await sleep(200);
+    } catch (error) {
+      last = error;
+      await sleep(300);
     }
   }
-  throw new Error('Chrome injoignable');
+  const log = chromeLog.trim().split('\n').slice(-5).join(' | ');
+  throw new Error(`Chrome injoignable (${CHROME}, code ${chrome.exitCode}, ${last?.message ?? '-'}) ${log}`);
 }
 
 // Un onglet : navigation, évaluation de JS dans la page, journal réseau des EventSource.
