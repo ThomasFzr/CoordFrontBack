@@ -78,7 +78,7 @@ export function renderCard(listing, onSelect) {
   return item;
 }
 
-export function renderDetail(listing, container, { message = '', onReserve, onRelease } = {}) {
+export function renderDetail(listing, container, { message = '', mine = false, onReserve, onRelease } = {}) {
   const place = [listing.address?.street, listing.address?.country].filter(Boolean).join(', ');
   const facts = [
     ['Type', `${listing.property_type ?? '—'} · ${listing.room_type ?? '—'}`],
@@ -113,8 +113,9 @@ export function renderDetail(listing, container, { message = '', onReserve, onRe
     reserve.type = 'button';
     reserve.disabled = isBooked(listing);
     reserve.addEventListener('click', () => { reserve.disabled = true; onReserve?.(listing._id); });
-    actions.append(el('span', `availability ${isBooked(listing) ? 'booked' : 'available'}`, isBooked(listing) ? 'Réservé' : 'Disponible'), reserve);
-    if (isBooked(listing)) {
+    const label = isBooked(listing) ? (mine ? 'Réservé par vous' : 'Réservé') : 'Disponible';
+    actions.append(el('span', `availability ${isBooked(listing) ? 'booked' : 'available'}`, label), reserve);
+    if (isBooked(listing) && mine) {
       const release = el('button', '', 'Annuler la réservation');
       release.type = 'button';
       release.addEventListener('click', () => onRelease?.(listing._id));

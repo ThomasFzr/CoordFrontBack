@@ -5,8 +5,21 @@ const API_URL = '/api';
 const LIMIT = 12;
 // Relecture de secours (ms). ?poll=0 la désactive pour vérifier SSE seul, sans qu'elle masque un défaut.
 const POLL_MS = Number(new URLSearchParams(location.search).get('poll') ?? 30_000);
-// Identité fictive de cet onglet : sert à la démonstration, pas à une authentification.
-const CUSTOMER_ID = `onglet-${Math.random().toString(36).slice(2, 8)}`;
+// Identité fictive de cet onglet (sessionStorage : propre à chaque onglet, conservée au rechargement).
+// Elle sert à la démonstration, pas à une authentification.
+const session = {
+  get(key, fallback) {
+    try { return JSON.parse(sessionStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+  },
+  set(key, value) {
+    try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* stockage indisponible : mémoire seule */ }
+  },
+};
+const CUSTOMER_ID = session.get('customerId', null) ?? `onglet-${Math.random().toString(36).slice(2, 8)}`;
+session.set('customerId', CUSTOMER_ID);
+// Réservations faites depuis cet onglet : seul cet onglet propose de les annuler (l'API le vérifie aussi).
+const mine = new Set(session.get('reservations', []));
+const saveMine = () => session.set('reservations', [...mine]);
 
 const form = document.querySelector('#filters');
 const list = document.querySelector('#list');
@@ -102,7 +115,10 @@ async function refreshDetail() {
   const id = openId;
   try {
     const listing = validateListing(await getJson(`/listings/${encodeURIComponent(id)}`));
-    if (openId === id) renderDetail(listing, detailBody, { message: detailMessage, onReserve: reserve, onRelease: release });
+    if (listing.status !== 'BOOKED' && mine.delete(id)) saveMine();
+    if (openId === id) {
+      renderDetail(listing, detailBody, { message: detailMessage, mine: mine.has(id), onReserve: reserve, onRelease: release });
+    }
   } catch (error) {
     if (openId === id) detailBody.textContent = error.message;
   }
@@ -126,6 +142,7 @@ async function reserve(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customerId: CUSTOMER_ID }),
     });
+    if (response.status === 201) { mine.add(id); saveMine(); }
     detailMessage = {
       201: 'Votre réservation est confirmée.',
       409: 'Cette annonce vient d’être réservée. Choisissez-en une autre.',
@@ -140,8 +157,17 @@ async function reserve(id) {
 }
 
 async function release(id) {
-  const response = await fetch(`${API_URL}/listings/${encodeURIComponent(id)}/reservations`, { method: 'DELETE' }).catch(() => null);
-  detailMessage = response?.status === 204 ? 'Réservation annulée.' : 'Annulation impossible.';
+  const response = await fetch(`${API_URL}/listings/${encodeURIComponent(id)}/reservations`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customerId: CUSTOMER_ID }),
+  }).catch(() => null);
+  if (response?.status === 204) { mine.delete(id); saveMine(); }
+  detailMessage = {
+    204: 'Réservation annulée.',
+    403: 'Cette réservation a été faite par quelqu’un d’autre.',
+    404: 'Il n’y a plus de réservation sur cette annonce.',
+  }[response?.status] ?? 'Annulation impossible.';
   await refreshDetail();
   reload();
 }

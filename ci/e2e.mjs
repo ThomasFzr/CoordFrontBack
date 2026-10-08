@@ -133,8 +133,14 @@ try {
   await B.waitFor('fiche B réservée', `document.querySelector('.availability')?.textContent === 'Réservé' && document.querySelector('.actions .primary').disabled`);
   await B.waitFor('carte B réservée', cardBooked(id));
   if (await B.eval(`!!document.querySelector('.message')`)) throw new Error('B affiche une confirmation personnelle');
+  if (await B.eval(`[...document.querySelectorAll('.actions button')].some((b) => b.textContent === 'Annuler la réservation')`)) {
+    throw new Error('B peut annuler la réservation de A');
+  }
+  if (!(await A.eval(`[...document.querySelectorAll('.actions button')].some((b) => b.textContent === 'Annuler la réservation')`))) {
+    throw new Error('A ne peut pas annuler sa propre réservation');
+  }
   if (!(await B.eval(`window.__sansNavigation === true`))) throw new Error('B a rechargé la page');
-  ok('B voit « Réservé » et « Indisponible » sans navigation ni confirmation personnelle');
+  ok('B voit « Réservé » et « Indisponible » sans navigation, sans confirmation ni bouton Annuler ; A peut annuler');
 
   // Un nouvel onglet obtient l'état courant à sa connexion.
   const C = await openTab(url);

@@ -77,7 +77,7 @@ app.get('/', (req, res) => {
       'PATCH /listings/:id',
       'DELETE /listings/:id',
       'POST /listings/:id/reservations   { customerId } → 201 | 409 | 404',
-      'DELETE /listings/:id/reservations → 204 | 404',
+      'DELETE /listings/:id/reservations { customerId } → 204 | 403 | 404',
       'GET /events (SSE : ready, listing-updated, : keepalive)',
     ],
   });
@@ -196,13 +196,23 @@ app.post('/listings/:id/reservations', async (req, res) => {
   res.status(201).json({ listingId: winner._id, status: winner.status, version: winner.version });
 });
 
+// Seule la personne qui a réservé peut annuler : la règle est vérifiée par l'API, pas par l'interface.
 app.delete('/listings/:id/reservations', async (req, res) => {
+  const customerId = req.body?.customerId;
+  if (typeof customerId !== 'string' || !customerId.trim()) {
+    return res.status(400).json({ error: '"customerId" is required' });
+  }
   const freed = await listings.findOneAndUpdate(
-    { _id: req.params.id, status: 'BOOKED' },
+    { _id: req.params.id, status: 'BOOKED', 'booking.customerId': customerId },
     { $set: { status: 'AVAILABLE' }, $unset: { booking: '' }, $inc: { version: 1 } },
     { returnDocument: 'after', projection: { version: 1 } },
   );
-  if (!freed) return res.status(404).json({ error: 'No reservation for this listing' });
+  if (!freed) {
+    const current = await listings.findOne({ _id: req.params.id }, { projection: { status: 1 } });
+    return current?.status === 'BOOKED'
+      ? res.status(403).json({ error: 'Reservation belongs to someone else' })
+      : res.status(404).json({ error: 'No reservation for this listing' });
+  }
   notifyChanged(freed._id, 'released', freed.version);
   res.status(204).end();
 });

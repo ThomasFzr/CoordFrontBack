@@ -12,7 +12,7 @@ sans tampon. L'API reste aussi joignable directement sur le port 3000.
 | `GET /api/listings` | 200 ; `{ page, limit, total, pages, data[] }`, chaque annonce porte `status` et `version` si elle en a. |
 | `GET /api/listings/:id` | 200 ; annonce sans le champ `booking` (jamais public). 404 si inconnue. |
 | `POST /api/listings/:id/reservations` | Corps `{ "customerId": "…" }` (identité fictive). 201 si accepté, 409 si déjà réservée, 404 si inconnue, 400 sans `customerId`. |
-| `DELETE /api/listings/:id/reservations` | 204 si une réservation est annulée, 404 sinon. |
+| `DELETE /api/listings/:id/reservations` | Corps `{ "customerId": "…" }`. 204 si la réservation est annulée par son titulaire, 403 si elle appartient à quelqu'un d'autre, 404 s'il n'y en a pas, 400 sans `customerId`. |
 | `GET /api/events` | 200 ; `Content-Type: text/event-stream`. |
 | `ready` | Envoyé à chaque abonnement, avec `retry: 2000`. Données `{"action":"reload"}` : relire la liste. |
 | `listing-updated` | Envoyé **après** chaque écriture réussie. Données `{ listingId, change, version }`, `change` ∈ `created`, `updated`, `deleted`, `reserved`, `released`. Déclenche une relecture. |
@@ -32,6 +32,8 @@ processus : il repart à zéro au redémarrage et ne permet pas de rejouer les �
   affiche l'annonce indisponible, sans message de confirmation.
 - Les actions de réservation ne sont proposées que sur les annonces fictives (`_id` en `test-…`),
   créées avec le bouton « + Annonce de test ».
+- Chaque onglet a une identité fictive (`sessionStorage`) et ne propose « Annuler » que pour ses propres
+  réservations ; l'API refuse de toute façon (403) l'annulation par quelqu'un d'autre.
 
 ## Limites connues
 
