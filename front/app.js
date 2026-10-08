@@ -91,6 +91,9 @@ async function reload() {
       for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
       const payload = validatePage(await getJson(`/listings?${params}`));
       if (stopped) return;
+      // Une demande plus récente (filtre, frappe, événement) est arrivée pendant la lecture :
+      // ce résultat est déjà périmé, on ne l'affiche pas et on relit tout de suite.
+      if (dirty) continue;
       pages = Math.max(1, payload.pages);
       renderCards(payload.data, list, openDetail);
       const time = new Date().toLocaleTimeString('fr-FR');
@@ -311,8 +314,22 @@ async function createTestListing() {
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
+  clearTimeout(typing);
   page = 1;
   loadListings();
+});
+
+// Recherche réactive : on attend une courte pause dans la frappe, et on garde les résultats affichés
+// pendant la recherche. reload() est sérialisée : la dernière saisie l'emporte toujours.
+const SEARCH_DELAY_MS = 250;
+let typing;
+form.elements.q.addEventListener('input', () => {
+  clearTimeout(typing);
+  typing = setTimeout(() => {
+    page = 1;
+    setStatus('loading', 'Recherche…');
+    reload();
+  }, SEARCH_DELAY_MS);
 });
 for (const select of form.querySelectorAll('select')) select.addEventListener('change', () => form.requestSubmit());
 prev.addEventListener('click', () => { page -= 1; loadListings(); });

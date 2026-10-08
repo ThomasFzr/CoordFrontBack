@@ -20,6 +20,17 @@ ok "GET /listings (pagination, Decimal128 → nombre)"
   || fail "filtre country"
 ok "GET /listings?country="
 
+# --- Recherche multi-champs (fixture : Porto = 12 annonces, Barcelona + Apartment = 3) ---
+total() { curl -sf -G "$API/listings" --data-urlencode "q=$1" | jq -r .total; }
+[ "$(total porto)" = 12 ] || fail "recherche dans address.market (porto)"
+[ "$(total 'barcelona apartment')" = 3 ] || fail "recherche : tous les mots, dans des champs différents"
+[ "$(total fictive)" = 45 ] || fail "recherche dans summary"
+[ "$(total 'pórto')" = 12 ] || fail "recherche insensible aux accents"
+[ "$(total 'PORTO')" = 12 ] || fail "recherche insensible à la casse"
+[ "$(total '(')" = 0 ] || fail "caractère spécial échappé, pas d'erreur"
+[ "$(total '.*')" = 0 ] || fail "saisie jamais interprétée comme regex"
+ok "recherche : plusieurs champs, tous les mots, accents, casse, caractères spéciaux échappés"
+
 [ "$(curl -sf "$API/listings/ci-001" | jq -r .name)" = "Logement CI 1" ] || fail "détail ci-001"
 [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/listings/inconnu")" = 404 ] || fail "404 attendu"
 ok "GET /listings/:id (200 et 404)"

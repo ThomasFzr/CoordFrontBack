@@ -28,6 +28,50 @@ const LIST_PROJECTION = {
   status: 1,
   version: 1,
 };
+// --- Recherche plein texte simple sur plusieurs champs ---
+const SEARCH_FIELDS = [
+  'name',
+  'summary',
+  'description',
+  'neighborhood_overview',
+  'property_type',
+  'room_type',
+  'address.market',
+  'address.country',
+  'address.street',
+  'address.suburb',
+];
+
+// Lettres accentuées équivalentes : « sao paulo » trouve « São Paulo », « pórto » trouve « Porto ».
+const ACCENTS = {
+  a: 'aàáâãäå', c: 'cç', e: 'eèéêë', i: 'iìíîï', n: 'nñ', o: 'oòóôõö', u: 'uùúûü', y: 'yýÿ',
+};
+const ACCENT_OF = Object.fromEntries(
+  Object.entries(ACCENTS).flatMap(([base, all]) => [...all].map((letter) => [letter, base])),
+);
+
+// La saisie est échappée : elle n'est jamais interprétée comme une expression régulière.
+function wordPattern(word) {
+  return [...word.toLowerCase()]
+    .map((char) => {
+      const base = ACCENT_OF[char];
+      return base ? `[${ACCENTS[base]}]` : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    })
+    .join('');
+}
+
+// Chaque mot doit apparaître dans au moins un des champs (ET entre les mots, OU entre les champs).
+function searchFilter(q) {
+  const words = String(q).trim().slice(0, 100).split(/\s+/).filter(Boolean).slice(0, 8);
+  if (!words.length) return {};
+  return {
+    $and: words.map((word) => {
+      const regex = { $regex: wordPattern(word), $options: 'i' };
+      return { $or: SEARCH_FIELDS.map((field) => ({ [field]: regex })) };
+    }),
+  };
+}
+
 // La réservation (customerId) n'est jamais renvoyée par les lectures publiques.
 const PUBLIC_PROJECTION = { booking: 0 };
 
@@ -82,7 +126,7 @@ app.get('/', (req, res) => {
     name: 'Listings API',
     endpoints: [
       'GET /health',
-      'GET /listings?page=&limit=&q=&property_type=&country=&market=',
+      'GET /listings?page=&limit=&q=&property_type=&country=&market=   (q : mots cherchés dans nom, résumé, description, quartier, ville, pays, adresse, type)',
       'GET /listings/:id',
       'POST /listings',
       'PUT /listings/:id     (If-Match: <version> optionnel → 409 si modifiée entre-temps)',
@@ -119,8 +163,7 @@ app.get('/listings', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
 
-  const filter = {};
-  if (req.query.q) filter.name = { $regex: req.query.q, $options: 'i' };
+  const filter = req.query.q ? searchFilter(req.query.q) : {};
   if (req.query.property_type) filter.property_type = req.query.property_type;
   if (req.query.country) filter['address.country'] = req.query.country;
   if (req.query.market) filter['address.market'] = req.query.market;

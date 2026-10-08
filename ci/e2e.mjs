@@ -77,7 +77,11 @@ async function openTab(url) {
       try { if (await tab.eval(expression)) return; } catch {}
       await sleep(150);
     }
-    throw new Error(`délai dépassé : ${label}`);
+    // Diagnostic : ce que la page affiche au moment de l'échec.
+    const seen = await tab.eval(`JSON.stringify({ statut: document.querySelector('#status')?.textContent,
+      live: document.querySelector('#live')?.textContent,
+      cartes: [...document.querySelectorAll('#list .card-place')].slice(0, 4).map((e) => e.textContent) })`).catch(() => '?');
+    throw new Error(`délai dépassé : ${label} — page : ${seen}`);
   };
   // Le marqueur posé sur l'ancien document disparaît avec lui : on attend le document réellement chargé.
   tab.goto = async (u) => {
@@ -150,6 +154,20 @@ try {
   }
   if (!(await B.eval(`window.__sansNavigation === true`))) throw new Error('B a rechargé la page');
   ok('B voit « Réservé » et « Indisponible » sans navigation, sans confirmation ni bouton Annuler ; A peut annuler');
+
+  // Recherche réactive : frappe lettre par lettre, sans valider ; un champ autre que le nom (la ville).
+  await B.eval(`(() => { const q = document.querySelector('#filters').q; q.value = ''; q.dispatchEvent(new Event('input')); return true; })()`);
+  await B.eval(`(async () => {
+    const q = document.querySelector('#filters').q;
+    for (const char of 'barcelona') { q.value += char; q.dispatchEvent(new Event('input')); await new Promise((r) => setTimeout(r, 60)); }
+    return true;
+  })()`);
+  await B.waitFor('résultats de la recherche réactive', `(() => {
+    const places = [...document.querySelectorAll('#list .card-place')].map((e) => e.textContent);
+    return document.querySelector('#status').textContent.startsWith('11 annonces') && places.length > 0 && places.every((p) => p.includes('Barcelona'));
+  })()`);
+  ok('recherche réactive : résultats à la frappe, sans valider, sur la ville (Barcelona)');
+  await B.eval(search('Annonce de test'));
 
   // Un nouvel onglet obtient l'état courant à sa connexion.
   const C = await openTab(url);
