@@ -1,7 +1,12 @@
-import { renderCard, renderCards, renderDetail, titleOf, validateListing, validatePage } from './view.js';
+import { isTestListing, renderCards, renderDetail, validateListing, validatePage } from './view.js';
 
-const API_URL = `${location.protocol}//${location.hostname}:3000`;
+// Même origine : nginx relaie /api vers l'API (pas de CORS, pas de port en dur).
+const API_URL = '/api';
 const LIMIT = 12;
+// Relecture de secours (ms). ?poll=0 la désactive pour vérifier SSE seul, sans qu'elle masque un défaut.
+const POLL_MS = Number(new URLSearchParams(location.search).get('poll') ?? 30_000);
+// Identité fictive de cet onglet : sert à la démonstration, pas à une authentification.
+const CUSTOMER_ID = `onglet-${Math.random().toString(36).slice(2, 8)}`;
 
 const form = document.querySelector('#filters');
 const list = document.querySelector('#list');
@@ -13,9 +18,12 @@ const dialog = document.querySelector('#detail');
 const detailBody = document.querySelector('#detail-body');
 const live = document.querySelector('#live');
 const toasts = document.querySelector('#toasts');
+const addTest = document.querySelector('#add-test');
 
 let page = 1;
 let pages = 1;
+let openId = null;      // annonce affichée dans la fiche
+let detailMessage = ''; // confirmation personnelle : seulement dans l'onglet qui a agi
 
 async function getJson(path) {
   const response = await fetch(`${API_URL}${path}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
@@ -28,50 +36,11 @@ function setStatus(state, text) {
   status.textContent = text;
 }
 
-async function loadListings() {
-  const params = new URLSearchParams({ page, limit: LIMIT });
-  for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
-
-  prev.disabled = next.disabled = true;
-  list.replaceChildren();
-  setStatus('loading', 'Chargement des annonces…');
-
-  try {
-    const payload = validatePage(await getJson(`/listings?${params}`));
-    pages = Math.max(1, payload.pages);
-    renderCards(payload.data, list, openDetail);
-    setStatus('success', payload.total ? `${payload.total} annonces` : 'Aucune annonce ne correspond à ces filtres.');
-  } catch (error) {
-    setStatus('error', error.message);
-  } finally {
-    pageInfo.textContent = `Page ${page} / ${pages}`;
-    prev.disabled = page <= 1;
-    next.disabled = page >= pages;
-  }
+function setLive(state, text) {
+  live.dataset.state = state;
+  live.textContent = text;
 }
 
-async function openDetail(id) {
-  detailBody.textContent = 'Chargement…';
-  dialog.showModal();
-  try {
-    renderDetail(validateListing(await getJson(`/listings/${encodeURIComponent(id)}`)), detailBody);
-  } catch (error) {
-    detailBody.textContent = error.message;
-  }
-}
-
-form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  page = 1;
-  loadListings();
-});
-for (const select of form.querySelectorAll('select')) select.addEventListener('change', () => form.requestSubmit());
-prev.addEventListener('click', () => { page -= 1; loadListings(); });
-next.addEventListener('click', () => { page += 1; loadListings(); });
-dialog.querySelector('.close').addEventListener('click', () => dialog.close());
-dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
-
-  // --- Temps réel (SSE) ---
 function toast(text, action) {
   const item = document.createElement('div');
   item.className = 'toast';
@@ -87,42 +56,182 @@ function toast(text, action) {
   setTimeout(() => item.remove(), 6000);
 }
 
-const cardOf = (id) => [...list.children].find((li) => li.dataset.id === id);
+// --- Relecture sérialisée : une seule lecture à la fois, la dernière demande gagne ---
+let running = false;
+let dirty = false;
+let stopped = false;
 
-function onEvent(handler) {
-  return (event) => {
+async function reload() {
+  if (stopped) return;
+  dirty = true;
+  if (running) return;
+  running = true;
+  try {
+    while (dirty && !stopped) {
+      dirty = false;
+      const params = new URLSearchParams({ page, limit: LIMIT });
+      for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
+      const payload = validatePage(await getJson(`/listings?${params}`));
+      if (stopped) return;
+      pages = Math.max(1, payload.pages);
+      renderCards(payload.data, list, openDetail);
+      const time = new Date().toLocaleTimeString('fr-FR');
+      setStatus('success', payload.total ? `${payload.total} annonces · actualisé à ${time}` : 'Aucune annonce ne correspond à ces filtres.');
+    }
+  } catch (error) {
+    setStatus('error', `Actualisation impossible. ${error.message}`);
+  } finally {
+    running = false;
+    pageInfo.textContent = `Page ${page} / ${pages}`;
+    prev.disabled = page <= 1;
+    next.disabled = page >= pages;
+  }
+}
+
+// Action de l'utilisateur (filtre, page) : on vide la liste pour ne pas montrer d'anciennes données.
+function loadListings() {
+  list.replaceChildren();
+  prev.disabled = next.disabled = true;
+  setStatus('loading', 'Chargement des annonces…');
+  reload();
+}
+
+// --- Fiche détail ---
+async function refreshDetail() {
+  if (!openId) return;
+  const id = openId;
+  try {
+    const listing = validateListing(await getJson(`/listings/${encodeURIComponent(id)}`));
+    if (openId === id) renderDetail(listing, detailBody, { message: detailMessage, onReserve: reserve, onRelease: release });
+  } catch (error) {
+    if (openId === id) detailBody.textContent = error.message;
+  }
+}
+
+function openDetail(id) {
+  openId = id;
+  detailMessage = '';
+  detailBody.textContent = 'Chargement…';
+  dialog.showModal();
+  refreshDetail();
+}
+
+dialog.addEventListener('close', () => { openId = null; });
+
+// Seule la réponse du POST personnel confirme la réservation ; le flux SSE n'informe que de la disponibilité.
+async function reserve(id) {
+  try {
+    const response = await fetch(`${API_URL}/listings/${encodeURIComponent(id)}/reservations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId: CUSTOMER_ID }),
+    });
+    detailMessage = {
+      201: 'Votre réservation est confirmée.',
+      409: 'Cette annonce vient d’être réservée. Choisissez-en une autre.',
+      404: 'Cette annonce n’existe plus.',
+    }[response.status] ?? `Réservation refusée (HTTP ${response.status}).`;
+  } catch {
+    // La requête a pu être enregistrée avant la perte de la réponse : on relit avant de réessayer.
+    detailMessage = 'Résultat incertain : vérifiez l’état de l’annonce avant de réessayer.';
+  }
+  await refreshDetail();
+  reload();
+}
+
+async function release(id) {
+  const response = await fetch(`${API_URL}/listings/${encodeURIComponent(id)}/reservations`, { method: 'DELETE' }).catch(() => null);
+  detailMessage = response?.status === 204 ? 'Réservation annulée.' : 'Annulation impossible.';
+  await refreshDetail();
+  reload();
+}
+
+// Données fictives uniquement : les actions du TP ne touchent jamais les vraies annonces.
+async function createTestListing() {
+  const id = `test-${Date.now().toString(36)}`;
+  const name = `Annonce de test ${new Date().toLocaleTimeString('fr-FR')}`;
+  const response = await fetch(`${API_URL}/listings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _id: id,
+      name,
+      summary: 'Annonce fictive créée pour tester la synchronisation SSE.',
+      property_type: 'Apartment',
+      room_type: 'Entire home/apt',
+      accommodates: 2,
+      bedrooms: 1,
+      beds: 1,
+      price: 99,
+      address: { market: 'Test', country: 'Test' },
+    }),
+  }).catch(() => null);
+  if (response?.status === 201) {
+    toast(`${name} créée`, { label: 'Voir', run: () => openDetail(id) });
+    reload();
+  } else {
+    toast('Création impossible.');
+  }
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  page = 1;
+  loadListings();
+});
+for (const select of form.querySelectorAll('select')) select.addEventListener('change', () => form.requestSubmit());
+prev.addEventListener('click', () => { page -= 1; loadListings(); });
+next.addEventListener('click', () => { page += 1; loadListings(); });
+dialog.querySelector('.close').addEventListener('click', () => dialog.close());
+dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+addTest.addEventListener('click', createTestListing);
+
+// --- Temps réel : un seul flux par onglet ---
+let stream;
+let timer;
+
+function connect() {
+  stream = new EventSource(`${API_URL}/events`);
+  // ready arrive à chaque (re)connexion : relire rattrape ce qui a changé pendant une coupure.
+  stream.addEventListener('ready', () => {
+    setLive('on', 'En direct');
+    reload();
+  });
+  stream.addEventListener('listing-updated', (event) => {
+    reload();
     try {
-      handler(JSON.parse(event.data));
-    } catch (error) {
-      console.warn('Événement SSE ignoré :', error.message, event.data);
+      const change = JSON.parse(event.data);
+      if (change.listingId === openId) refreshDetail();
+    } catch {
+      console.warn('Événement SSE illisible :', event.data);
+    }
+  });
+  stream.onerror = () => {
+    setLive('off', 'Connexion interrompue…');
+    // Coupure réseau : EventSource se reconnecte seul, on ne ferme rien.
+    // Réponse non-SSE (ex. 502 de nginx pendant un redémarrage de l'API) : le navigateur abandonne
+    // définitivement (CLOSED), on recrée donc le flux nous-mêmes.
+    if (stream.readyState === EventSource.CLOSED) {
+      setTimeout(() => { if (!stopped && stream.readyState === EventSource.CLOSED) connect(); }, 2000);
     }
   };
 }
 
-const events = new EventSource(`${API_URL}/events`);
-events.addEventListener('open', () => { live.dataset.state = 'on'; live.textContent = 'En direct'; });
-events.addEventListener('error', () => { live.dataset.state = 'off'; live.textContent = 'Reconnexion…'; });
+function start() {
+  stopped = false;
+  connect();
+  if (POLL_MS > 0) timer = setInterval(reload, POLL_MS);
+}
 
-events.addEventListener('created', onEvent((data) => {
-  const listing = validateListing(data);
-  toast(`Nouvelle annonce : ${titleOf(listing)}`, { label: 'Voir', run: () => openDetail(listing._id) });
-}));
+function stop() {
+  stopped = true;
+  stream?.close();
+  clearInterval(timer);
+}
 
-events.addEventListener('updated', onEvent((data) => {
-  const listing = validateListing(data);
-  const card = cardOf(listing._id);
-  if (card) {
-    const fresh = renderCard(listing, openDetail);
-    fresh.classList.add('flash');
-    card.replaceWith(fresh);
-  }
-  toast(`Annonce modifiée : ${titleOf(listing)}`);
-}));
-
-events.addEventListener('deleted', onEvent((data) => {
-  if (typeof data?._id !== 'string') throw new Error('Réponse incompatible avec le contrat attendu.');
-  cardOf(data._id)?.remove();
-  toast(`Annonce supprimée : ${data._id}`);
-}));
+// Démontage : l'onglet est fermé ou quitté ; s'il revient du cache de navigation, on se réabonne.
+window.addEventListener('pagehide', stop);
+window.addEventListener('pageshow', (event) => { if (event.persisted) start(); });
 
 loadListings();
+start();

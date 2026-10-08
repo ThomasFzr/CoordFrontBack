@@ -25,34 +25,40 @@ const LIST_PROJECTION = {
   'address.market': 1,
   'address.country': 1,
   'review_scores.review_scores_rating': 1,
+  status: 1,
+  version: 1,
 };
+// La réservation (customerId) n'est jamais renvoyée par les lectures publiques.
+const PUBLIC_PROJECTION = { booking: 0 };
 
 const decimalReplacer = (key, value) =>
   value && typeof value === 'object' && '$numberDecimal' in value ? Number(value.$numberDecimal) : value;
 
-// --- Server-Sent Events : diffusion des écritures faites via cette instance de l'API ---
+// --- Server-Sent Events ---
+// L'API enregistre, puis notifie ; le front relit la liste. Le flux ne transporte que des
+// données publiques minimales (listingId, change, version) : jamais de customerId ni de réservation.
+const HEARTBEAT_MS = Number(process.env.SSE_HEARTBEAT_MS ?? 15_000);
 const sseClients = new Set();
-let lastEventId = 0;
+let sequence = 0; // identifiant d'événement local au processus : pas un historique rejouable
 
-const toSummary = (doc) => ({
-  _id: doc._id,
-  name: doc.name,
-  summary: doc.summary,
-  property_type: doc.property_type,
-  room_type: doc.room_type,
-  accommodates: doc.accommodates,
-  bedrooms: doc.bedrooms,
-  beds: doc.beds,
-  price: doc.price,
-  images: { picture_url: doc.images?.picture_url },
-  address: { market: doc.address?.market, country: doc.address?.country },
-  review_scores: { review_scores_rating: doc.review_scores?.review_scores_rating },
-});
-
-function broadcast(type, data) {
-  const message = `id: ${++lastEventId}\nevent: ${type}\ndata: ${JSON.stringify(data, decimalReplacer)}\n\n`;
-  for (const res of sseClients) res.write(message);
+// Un client en erreur est retiré sans faire échouer l'écriture qui a déclenché la notification.
+function send(res, chunk) {
+  try {
+    res.write(chunk);
+  } catch {
+    sseClients.delete(res);
+  }
 }
+
+function notifyChanged(listingId, change, version) {
+  const data = JSON.stringify({ listingId, change, version: version ?? null });
+  const message = `id: ${++sequence}\nevent: listing-updated\ndata: ${data}\n\n`;
+  for (const res of sseClients) send(res, message);
+}
+
+setInterval(() => {
+  for (const res of sseClients) send(res, ': keepalive\n\n');
+}, HEARTBEAT_MS).unref();
 
 const app = express();
 app.use(cors());
@@ -70,7 +76,9 @@ app.get('/', (req, res) => {
       'PUT /listings/:id',
       'PATCH /listings/:id',
       'DELETE /listings/:id',
-      'GET /events (SSE : created, updated, deleted)',
+      'POST /listings/:id/reservations   { customerId } → 201 | 409 | 404',
+      'DELETE /listings/:id/reservations → 204 | 404',
+      'GET /events (SSE : ready, listing-updated, : keepalive)',
     ],
   });
 });
@@ -83,15 +91,10 @@ app.get('/health', async (req, res) => {
 app.get('/events', (req, res) => {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   res.flushHeaders();
-  res.write(`retry: 3000\nevent: ready\ndata: ${JSON.stringify({ clients: sseClients.size + 1 })}\n\n`);
   sseClients.add(res);
-
-  // Commentaire périodique : garde la connexion ouverte à travers proxies et répartiteurs.
-  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25_000);
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    sseClients.delete(res);
-  });
+  res.on('error', () => sseClients.delete(res));
+  req.on('close', () => sseClients.delete(res));
+  send(res, `retry: 2000\nevent: ready\ndata: ${JSON.stringify({ action: 'reload' })}\n\n`);
 });
 
 app.get('/listings', async (req, res) => {
@@ -118,44 +121,89 @@ app.get('/listings', async (req, res) => {
 });
 
 app.get('/listings/:id', async (req, res) => {
-  const listing = await listings.findOne({ _id: req.params.id });
+  const listing = await listings.findOne({ _id: req.params.id }, { projection: PUBLIC_PROJECTION });
   if (!listing) return res.status(404).json({ error: 'Listing not found' });
   res.json(listing);
 });
 
 app.post('/listings', async (req, res) => {
   if (!req.body?.name) return res.status(400).json({ error: '"name" is required' });
-  const doc = { ...req.body, _id: String(req.body._id ?? new ObjectId()) };
+  const { booking, status, version, ...fields } = req.body;
+  const doc = { ...fields, _id: String(req.body._id ?? new ObjectId()), version: 1 };
   if (await listings.findOne({ _id: doc._id }, { projection: { _id: 1 } })) {
     return res.status(409).json({ error: 'Listing already exists' });
   }
   await listings.insertOne(doc);
-  broadcast('created', toSummary(doc));
+  notifyChanged(doc._id, 'created', doc.version);
   res.status(201).location(`/listings/${doc._id}`).json(doc);
 });
 
 app.put('/listings/:id', async (req, res) => {
   if (!req.body?.name) return res.status(400).json({ error: '"name" is required' });
-  const { _id, ...doc } = req.body;
-  const result = await listings.findOneAndReplace({ _id: req.params.id }, doc, { returnDocument: 'after' });
+  const { _id, booking, status, version, ...doc } = req.body;
+  const current = await listings.findOne({ _id: req.params.id }, { projection: { version: 1, status: 1, booking: 1 } });
+  if (!current) return res.status(404).json({ error: 'Listing not found' });
+  // Remplacer le contenu ne libère pas une réservation : statut et réservation sont conservés.
+  const kept = Object.fromEntries(Object.entries({ status: current.status, booking: current.booking }).filter(([, v]) => v !== undefined));
+  const result = await listings.findOneAndReplace(
+    { _id: req.params.id },
+    { ...doc, ...kept, version: (current.version ?? 0) + 1 },
+    { returnDocument: 'after', projection: PUBLIC_PROJECTION },
+  );
   if (!result) return res.status(404).json({ error: 'Listing not found' });
-  broadcast('updated', toSummary(result));
+  notifyChanged(result._id, 'updated', result.version);
   res.json(result);
 });
 
 app.patch('/listings/:id', async (req, res) => {
-  const { _id, ...changes } = req.body ?? {};
+  const { _id, booking, status, version, ...changes } = req.body ?? {};
   if (Object.keys(changes).length === 0) return res.status(400).json({ error: 'Empty body' });
-  const result = await listings.findOneAndUpdate({ _id: req.params.id }, { $set: changes }, { returnDocument: 'after' });
+  const result = await listings.findOneAndUpdate(
+    { _id: req.params.id },
+    { $set: changes, $inc: { version: 1 } },
+    { returnDocument: 'after', projection: PUBLIC_PROJECTION },
+  );
   if (!result) return res.status(404).json({ error: 'Listing not found' });
-  broadcast('updated', toSummary(result));
+  notifyChanged(result._id, 'updated', result.version);
   res.json(result);
 });
 
 app.delete('/listings/:id', async (req, res) => {
   const { deletedCount } = await listings.deleteOne({ _id: req.params.id });
   if (!deletedCount) return res.status(404).json({ error: 'Listing not found' });
-  broadcast('deleted', { _id: req.params.id });
+  notifyChanged(req.params.id, 'deleted', null);
+  res.status(204).end();
+});
+
+// Réservation : mise à jour conditionnelle, la base garantit qu'une seule demande l'emporte.
+app.post('/listings/:id/reservations', async (req, res) => {
+  const customerId = req.body?.customerId;
+  if (typeof customerId !== 'string' || !customerId.trim()) {
+    return res.status(400).json({ error: '"customerId" is required' });
+  }
+  const winner = await listings.findOneAndUpdate(
+    { _id: req.params.id, status: { $ne: 'BOOKED' } },
+    { $set: { status: 'BOOKED', booking: { customerId, at: new Date() } }, $inc: { version: 1 } },
+    { returnDocument: 'after', projection: { status: 1, version: 1 } },
+  );
+  if (!winner) {
+    const exists = await listings.findOne({ _id: req.params.id }, { projection: { _id: 1 } });
+    return exists
+      ? res.status(409).json({ error: 'Listing already booked' })
+      : res.status(404).json({ error: 'Listing not found' });
+  }
+  notifyChanged(winner._id, 'reserved', winner.version);
+  res.status(201).json({ listingId: winner._id, status: winner.status, version: winner.version });
+});
+
+app.delete('/listings/:id/reservations', async (req, res) => {
+  const freed = await listings.findOneAndUpdate(
+    { _id: req.params.id, status: 'BOOKED' },
+    { $set: { status: 'AVAILABLE' }, $unset: { booking: '' }, $inc: { version: 1 } },
+    { returnDocument: 'after', projection: { version: 1 } },
+  );
+  if (!freed) return res.status(404).json({ error: 'No reservation for this listing' });
+  notifyChanged(freed._id, 'released', freed.version);
   res.status(204).end();
 });
 

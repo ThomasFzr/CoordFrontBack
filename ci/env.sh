@@ -28,10 +28,11 @@ ci_up() {
     mongosh --quiet mongodb://ci-mongo:27017 /seed.js
 
   # API_CPUS / API_MEMORY : mêmes limites qu'en production pour le baromètre.
-  docker run -d --name ci-api --network ci-net -p "$API_PORT:3000" \
+  docker run -d --name ci-api --network ci-net --network-alias api -p "$API_PORT:3000" \
+    ${SSE_HEARTBEAT_MS:+-e SSE_HEARTBEAT_MS="$SSE_HEARTBEAT_MS"} \
     ${API_CPUS:+--cpus "$API_CPUS"} ${API_MEMORY:+--memory "$API_MEMORY"} \
     -e MONGO_URI=mongodb://ci-mongo:27017 "$IMAGE" >/dev/null
-  docker run -d --name ci-front -p "$FRONT_PORT:80" \
+  docker run -d --name ci-front --network ci-net -p "$FRONT_PORT:80" \
     -v "$ROOT/front:/usr/share/nginx/html:ro" \
     -v "$ROOT/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
 

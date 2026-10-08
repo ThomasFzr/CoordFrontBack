@@ -96,7 +96,34 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
   background: var(--border);
   display: block;
 }
-.thumb.broken { visibility: hidden; }
+.thumb.placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: .9rem;
+  background: repeating-linear-gradient(45deg, var(--border) 0 12px, transparent 12px 24px);
+}
+.media { position: relative; }
+.badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #7a4cad;
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 600;
+}
+.secondary { white-space: nowrap; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 24px 12px; }
+.actions .primary { background: #0e7a6b; border-color: #0e7a6b; color: #fff; }
+.actions .primary:disabled { background: #7a4cad; border-color: #7a4cad; opacity: 1; }
+.availability { font-weight: 600; }
+.availability.available { color: #2fb344; }
+.availability.booked { color: #b07ce0; }
+.hint { color: var(--muted); font-size: .9rem; }
+.message { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); font-weight: 600; }
 
 .card-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px; flex: 1; }
 .card-place { color: var(--muted); font-size: .85rem; }
@@ -157,6 +184,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
   border-radius: 50%;
   background: var(--muted);
 }
+.live[data-state="off"] { color: var(--error); }
 .live[data-state="on"]::before { background: #2fb344; box-shadow: 0 0 0 3px rgb(47 179 68 / .2); }
 
 .toasts {

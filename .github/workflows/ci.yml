@@ -37,8 +37,12 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy:0.74.0 image --severity CRITICAL --exit-code 1 coordfrontback-api:ci
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: test
-        run: IMAGE=coordfrontback-api:ci ci/test.sh
+        run: IMAGE=coordfrontback-api:ci CHROME=$(command -v google-chrome) ci/test.sh
 
       - name: rollback
         run: IMAGE=coordfrontback-api:ci ci/rollback.sh

@@ -5,6 +5,10 @@ const isListing = (listing) => listing && isText(listing._id) && typeof listing.
 
 export const titleOf = (listing) => listing.name.trim() || 'Annonce sans titre';
 
+// Les actions du TP (réserver, annuler) sont limitées aux annonces fictives créées par l'interface.
+export const isTestListing = (listing) => listing._id.startsWith('test-');
+const isBooked = (listing) => listing.status === 'BOOKED';
+
 export function validatePage(payload) {
   if (!payload || !Array.isArray(payload.data) || !Number.isInteger(payload.page) || !Number.isInteger(payload.pages)) {
     throw new Error('Réponse incompatible avec le contrat attendu.');
@@ -27,12 +31,16 @@ function el(tag, className, text) {
   return node;
 }
 
+// Certaines photos de sample_airbnb ont disparu chez Airbnb (404) : on affiche un emplacement explicite.
 function image(listing) {
+  const placeholder = () => el('div', 'thumb placeholder', 'Photo indisponible');
+  const url = listing.images?.picture_url;
+  if (!url) return placeholder();
   const img = el('img', 'thumb');
   img.alt = '';
   img.loading = 'lazy';
-  img.src = listing.images?.picture_url ?? '';
-  img.addEventListener('error', () => img.classList.add('broken'), { once: true });
+  img.src = url;
+  img.addEventListener('error', () => img.replaceWith(placeholder()), { once: true });
   return img;
 }
 
@@ -62,12 +70,15 @@ export function renderCard(listing, onSelect) {
     el('span', 'rating', typeof rating === 'number' ? `★ ${rating}` : 'Pas de note'),
   );
 
-  card.append(image(listing), body);
+  const media = el('div', 'media');
+  media.append(image(listing));
+  if (isBooked(listing)) media.append(el('span', 'badge', 'Réservé'));
+  card.append(media, body);
   item.append(card);
   return item;
 }
 
-export function renderDetail(listing, container) {
+export function renderDetail(listing, container, { message = '', onReserve, onRelease } = {}) {
   const place = [listing.address?.street, listing.address?.country].filter(Boolean).join(', ');
   const facts = [
     ['Type', `${listing.property_type ?? '—'} · ${listing.room_type ?? '—'}`],
@@ -96,9 +107,28 @@ export function renderDetail(listing, container) {
     }),
   );
 
+  const actions = el('div', 'actions');
+  if (isTestListing(listing)) {
+    const reserve = el('button', 'primary', isBooked(listing) ? 'Indisponible' : 'Réserver');
+    reserve.type = 'button';
+    reserve.disabled = isBooked(listing);
+    reserve.addEventListener('click', () => { reserve.disabled = true; onReserve?.(listing._id); });
+    actions.append(el('span', `availability ${isBooked(listing) ? 'booked' : 'available'}`, isBooked(listing) ? 'Réservé' : 'Disponible'), reserve);
+    if (isBooked(listing)) {
+      const release = el('button', '', 'Annuler la réservation');
+      release.type = 'button';
+      release.addEventListener('click', () => onRelease?.(listing._id));
+      actions.append(release);
+    }
+  } else {
+    actions.append(el('span', 'hint', isBooked(listing) ? 'Réservé' : 'Réservation possible uniquement sur les annonces de test.'));
+  }
+
   container.replaceChildren(
     image(listing),
     el('h2', '', titleOf(listing)),
+    actions,
+    ...(message ? [el('p', 'message', message)] : []),
     el('p', 'card-place', place),
     el('p', 'summary', listing.summary || listing.description || ''),
     dl,

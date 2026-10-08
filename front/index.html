@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <h1>Listings</h1>
-    <span id="live" class="live" data-state="off" role="status">Connexion…</span>
+    <span id="live" class="live" data-state="connecting" role="status">Connexion…</span>
     <form id="filters" class="filters" autocomplete="off">
       <input name="q" type="search" placeholder="Rechercher un nom…" aria-label="Recherche par nom">
       <select name="country" aria-label="Pays">
@@ -42,6 +42,7 @@
       </select>
       <button type="submit">Filtrer</button>
     </form>
+    <button id="add-test" type="button" class="secondary">+ Annonce de test</button>
   </header>
 
   <main>
