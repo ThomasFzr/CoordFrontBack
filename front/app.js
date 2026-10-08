@@ -1,4 +1,4 @@
-import { renderCard, renderCards, renderDetail, validateListing, validatePage } from './view.js';
+import { renderCard, renderCards, renderDetail, titleOf, validateListing, validatePage } from './view.js';
 
 const API_URL = `${location.protocol}//${location.hostname}:3000`;
 const LIMIT = 12;
@@ -63,6 +63,14 @@ async function openDetail(id) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   page = 1;
+  loadListings();
+});
+for (const select of form.querySelectorAll('select')) select.addEventListener('change', () => form.requestSubmit());
+prev.addEventListener('click', () => { page -= 1; loadListings(); });
+next.addEventListener('click', () => { page += 1; loadListings(); });
+dialog.querySelector('.close').addEventListener('click', () => dialog.close());
+dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+
   // --- Temps réel (SSE) ---
 function toast(text, action) {
   const item = document.createElement('div');
@@ -97,7 +105,7 @@ events.addEventListener('error', () => { live.dataset.state = 'off'; live.textCo
 
 events.addEventListener('created', onEvent((data) => {
   const listing = validateListing(data);
-  toast(`Nouvelle annonce : ${listing.name}`, { label: 'Voir', run: () => openDetail(listing._id) });
+  toast(`Nouvelle annonce : ${titleOf(listing)}`, { label: 'Voir', run: () => openDetail(listing._id) });
 }));
 
 events.addEventListener('updated', onEvent((data) => {
@@ -108,7 +116,7 @@ events.addEventListener('updated', onEvent((data) => {
     fresh.classList.add('flash');
     card.replaceWith(fresh);
   }
-  toast(`Annonce modifiée : ${listing.name}`);
+  toast(`Annonce modifiée : ${titleOf(listing)}`);
 }));
 
 events.addEventListener('deleted', onEvent((data) => {
@@ -116,12 +124,5 @@ events.addEventListener('deleted', onEvent((data) => {
   cardOf(data._id)?.remove();
   toast(`Annonce supprimée : ${data._id}`);
 }));
-
-loadListings();
-});
-prev.addEventListener('click', () => { page -= 1; loadListings(); });
-next.addEventListener('click', () => { page += 1; loadListings(); });
-dialog.querySelector('.close').addEventListener('click', () => dialog.close());
-dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
 
 loadListings();

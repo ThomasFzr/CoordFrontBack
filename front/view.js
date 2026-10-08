@@ -1,21 +1,20 @@
 const isText = (value) => typeof value === 'string' && value.trim() !== '';
 
+// Contrat : _id texte non vide, name chaîne (vide dans 8 annonces de sample_airbnb, donc accepté).
+const isListing = (listing) => listing && isText(listing._id) && typeof listing.name === 'string';
+
+export const titleOf = (listing) => listing.name.trim() || 'Annonce sans titre';
+
 export function validatePage(payload) {
   if (!payload || !Array.isArray(payload.data) || !Number.isInteger(payload.page) || !Number.isInteger(payload.pages)) {
     throw new Error('Réponse incompatible avec le contrat attendu.');
   }
-  for (const listing of payload.data) {
-    if (!listing || !isText(listing._id) || !isText(listing.name)) {
-      throw new Error('Réponse incompatible avec le contrat attendu.');
-    }
-  }
+  if (!payload.data.every(isListing)) throw new Error('Réponse incompatible avec le contrat attendu.');
   return payload;
 }
 
 export function validateListing(listing) {
-  if (!listing || !isText(listing._id) || !isText(listing.name)) {
-    throw new Error('Réponse incompatible avec le contrat attendu.');
-  }
+  if (!isListing(listing)) throw new Error('Réponse incompatible avec le contrat attendu.');
   return listing;
 }
 
@@ -54,7 +53,7 @@ export function renderCard(listing, onSelect) {
   const body = el('div', 'card-body');
   body.append(
     el('span', 'card-place', place || 'Lieu inconnu'),
-    el('span', 'card-title', listing.name),
+    el('span', 'card-title', titleOf(listing)),
     el('span', 'card-meta', `${listing.property_type ?? '—'} · ${listing.accommodates ?? '?'} pers. · ${listing.bedrooms ?? '?'} ch.`),
     el('span', 'card-footer', ''),
   );
@@ -99,7 +98,7 @@ export function renderDetail(listing, container) {
 
   container.replaceChildren(
     image(listing),
-    el('h2', '', listing.name),
+    el('h2', '', titleOf(listing)),
     el('p', 'card-place', place),
     el('p', 'summary', listing.summary || listing.description || ''),
     dl,
