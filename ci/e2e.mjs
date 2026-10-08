@@ -59,13 +59,10 @@ async function openTab(url) {
   await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
   let id = 0;
   const pending = new Map();
-  // Connexions EventSource encore ouvertes (une reconnexion remplace la précédente, elle ne s'y ajoute pas).
-  const tab = { target, openStreams: new Map(), loaderId: null, errors: [] };
+  const tab = { target, errors: [] };
   ws.onmessage = ({ data }) => {
     const m = JSON.parse(data);
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-    if (m.method === 'Network.requestWillBeSent' && m.params.type === 'EventSource') tab.openStreams.set(m.params.requestId, m.params.loaderId);
-    if (m.method === 'Network.loadingFinished' || m.method === 'Network.loadingFailed') tab.openStreams.delete(m.params.requestId);
     if (m.method === 'Runtime.exceptionThrown') tab.errors.push(m.params.exceptionDetails.exception?.description);
   };
   tab.send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
@@ -82,16 +79,25 @@ async function openTab(url) {
     }
     throw new Error(`délai dépassé : ${label}`);
   };
+  // Le marqueur posé sur l'ancien document disparaît avec lui : on attend le document réellement chargé.
   tab.goto = async (u) => {
-    tab.openStreams.clear();
-    const { result } = await tab.send('Page.navigate', { url: u });
-    tab.loaderId = result?.loaderId ?? null;
-    await tab.waitFor('page chargée', `document.readyState === 'complete' && !!document.querySelector('#live')`);
+    await tab.eval(`window.__ancienDocument = true`).catch(() => {});
+    const reply = await tab.send('Page.navigate', { url: u });
+    const failure = reply.error?.message ?? reply.result?.errorText;
+    if (failure) throw new Error(`navigation vers ${u} impossible : ${failure}`);
+    await tab.waitFor('page chargée', `!window.__ancienDocument && document.readyState === 'complete' && !!document.querySelector('#live')`);
   };
   tab.close = () => fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`).then((r) => r.text());
-  await tab.send('Network.enable');
   await tab.send('Runtime.enable');
   await tab.send('Page.enable');
+  // Compte les EventSource créés par chaque document, avant tout script de la page. Une reconnexion
+  // automatique du navigateur réutilise l'objet ; un second connect() ou une boucle de recréation l'incrémente.
+  await tab.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `window.__fluxCrees = 0;
+      window.EventSource = class extends window.EventSource {
+        constructor(...args) { super(...args); window.__fluxCrees++; }
+      };`,
+  });
   await tab.goto(url);
   return tab;
 }
@@ -205,16 +211,19 @@ try {
   await C.waitFor('C voit la suppression', `document.querySelector('#detail-body').textContent === 'Cette annonce n’existe plus.' && !(${priceOf(175)})`);
   ok('CRUD : suppression confirmée dans A → fiche et carte retirées dans C');
 
-  // Recharger plusieurs fois : une seule connexion SSE par chargement de page.
+  // Recharger plusieurs fois : chaque page quittée doit fermer son flux, la page affichée n'en ouvre qu'un.
+  // Le serveur compte ses abonnés : A et C sont ouverts (B est fermé), donc 2 abonnés, pas un de plus.
+  const subscribers = async () => (await (await fetch(`${FRONT}/api/events/stats`)).json()).clients;
   for (let i = 0; i < 3; i++) await C.goto(url);
   await C.waitFor('C reconnecté', live);
-  await sleep(1000);
-  // Seules comptent les connexions du document affiché (la page précédente est déchargée).
-  const streams = [...C.openStreams.values()].filter((loader) => loader === C.loaderId).length;
-  if (streams !== 1) {
-    throw new Error(`${streams} connexions SSE ouvertes après rechargement (1 attendue) ; détail ${JSON.stringify([...C.openStreams.values()])} / ${C.loaderId}`);
-  }
-  ok('après plusieurs rechargements, une seule connexion SSE reste ouverte dans l’onglet');
+  const end = Date.now() + 8000;
+  while ((await subscribers()) !== 2 && Date.now() < end) await sleep(250);
+  // Laisser à une éventuelle boucle de reconnexion le temps de se manifester.
+  await sleep(3000);
+  const [created, count] = [await C.eval(`window.__fluxCrees`), await subscribers()];
+  if (created !== 1) throw new Error(`la page affichée a créé ${created} EventSource (1 attendu)`);
+  if (count !== 2) throw new Error(`${count} abonnés côté serveur après 3 rechargements de C (2 attendus : A et C)`);
+  ok('après 3 rechargements : un seul EventSource créé par la page, et le serveur ne compte que les onglets ouverts');
 
   // Coupure réelle : redémarrage de l'API, puis reconnexion et relecture.
   await C.eval(search('Annonce de test'));

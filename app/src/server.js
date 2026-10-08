@@ -91,6 +91,7 @@ app.get('/', (req, res) => {
       'POST /listings/:id/reservations   { customerId } → 201 | 409 | 404',
       'DELETE /listings/:id/reservations { customerId } → 204 | 403 | 404',
       'GET /events (SSE : ready, listing-updated, : keepalive)',
+      'GET /events/stats → { clients } (abonnés connectés à cette instance)',
     ],
   });
 });
@@ -107,6 +108,11 @@ app.get('/events', (req, res) => {
   res.on('error', () => sseClients.delete(res));
   req.on('close', () => sseClients.delete(res));
   send(res, `retry: 2000\nevent: ready\ndata: ${JSON.stringify({ action: 'reload' })}\n\n`);
+});
+
+// Observabilité du flux : nombre d'abonnés connectés à cette instance (aucune donnée personnelle).
+app.get('/events/stats', (req, res) => {
+  res.json({ clients: sseClients.size });
 });
 
 app.get('/listings', async (req, res) => {

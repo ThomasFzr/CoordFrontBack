@@ -16,6 +16,7 @@ sans tampon. L'API reste aussi joignable directement sur le port 3000.
 | `GET /api/events` | 200 ; `Content-Type: text/event-stream`. |
 | `ready` | Envoyé à chaque abonnement, avec `retry: 2000`. Données `{"action":"reload"}` : relire la liste. |
 | `listing-updated` | Envoyé **après** chaque écriture réussie. Données `{ listingId, change, version }`, `change` ∈ `created`, `updated`, `deleted`, `reserved`, `released`. Déclenche une relecture. |
+| `GET /api/events/stats` | 200 ; `{ clients }`, nombre d'abonnés connectés à cette instance (diagnostic). |
 | `: keepalive` | Commentaire toutes les 15 s (`SSE_HEARTBEAT_MS`), sans action métier. |
 
 `version` compte les modifications d'une annonce. L'`id:` d'un événement est un compteur local au
@@ -47,5 +48,5 @@ processus : il repart à zéro au redémarrage et ne permet pas de rejouer les �
 
 `ci/test.sh` vérifie le contrat HTTP et le flux à travers nginx, puis `ci/e2e.mjs` rejoue le TP dans
 Chrome : deux onglets synchronisés sans navigation, confirmation seulement dans l'onglet qui réserve,
-troisième onglet à jour à sa connexion, fermeture d'un abonné, une seule connexion après plusieurs
-rechargements, redémarrage de l'API avec reconnexion et données conservées.
+troisième onglet à jour à sa connexion, fermeture d'un abonné, un seul `EventSource` créé par page et
+aucun abonné en trop côté serveur après plusieurs rechargements, redémarrage de l'API avec reconnexion et données conservées.
