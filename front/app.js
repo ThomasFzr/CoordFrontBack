@@ -1,4 +1,4 @@
-import { normalizeQuery, renderCards, renderDetail, renderForm, validateListing, validatePage } from './view.js';
+import { normalizeQuery, renderCards, renderDetail, renderForm, renderReservations, validateListing, validatePage } from './view.js';
 
 // Même origine : nginx relaie /api vers l'API (pas de CORS, pas de port en dur).
 const API_URL = '/api';
@@ -33,6 +33,12 @@ const live = document.querySelector('#live');
 const toasts = document.querySelector('#toasts');
 const addTest = document.querySelector('#add-test');
 const addListing = document.querySelector('#add-listing');
+const listingsView = document.querySelector('#listings-view');
+const reservationsView = document.querySelector('#reservations-view');
+const reservationsTitle = document.querySelector('#reservations-title');
+const reservationsList = document.querySelector('#reservations');
+const reservationsStatus = document.querySelector('#reservations-status');
+const myCount = document.querySelector('#my-count');
 
 let page = 1;
 let pages = 1;
@@ -257,7 +263,7 @@ async function reserve(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customerId: CUSTOMER_ID }),
     });
-    if (response.status === 201) { mine.add(id); saveMine(); }
+    if (response.status === 201) { mine.add(id); saveMine(); loadReservations(); }
     detailMessage = {
       201: 'Votre réservation est confirmée.',
       409: 'Cette annonce vient d’être réservée. Choisissez-en une autre.',
@@ -278,14 +284,74 @@ async function release(id) {
     body: JSON.stringify({ customerId: CUSTOMER_ID }),
   }).catch(() => null);
   if (response?.status === 204) { mine.delete(id); saveMine(); }
-  detailMessage = {
+  const outcome = {
     204: 'Réservation annulée.',
     403: 'Cette réservation a été faite par quelqu’un d’autre.',
     404: 'Il n’y a plus de réservation sur cette annonce.',
   }[response?.status] ?? 'Annulation impossible.';
+  detailMessage = outcome;
   await refreshDetail();
   reload();
+  return { ok: response?.status === 204, outcome };
 }
+
+// --- Mes réservations ---
+// La liste vient de l'API (GET /reservations) : elle fait foi, la mémoire de l'onglet la suit.
+let reservationsRun = 0;
+async function loadReservations(notice = '') {
+  const run = ++reservationsRun;
+  try {
+    const { data } = await getJson(`/reservations?customerId=${encodeURIComponent(CUSTOMER_ID)}`);
+    if (run !== reservationsRun) return;
+    mine.clear();
+    for (const listing of data) mine.add(listing._id);
+    saveMine();
+    myCount.textContent = data.length ? `(${data.length})` : '';
+    if (reservationsView.hidden) return;
+    renderReservations(data, reservationsList, { onOpen: openDetail, onRelease: releaseFromList });
+    const count = data.length
+      ? `${data.length} réservation${data.length > 1 ? 's' : ''} en cours.`
+      : 'Aucune réservation pour le moment : réservez une annonce de test depuis « Annonces ».';
+    const text = notice ? `${notice} ${count}` : count;
+    // Même texte : on ne le réécrit pas, pour que la région status n'annonce que les vrais changements.
+    if (reservationsStatus.textContent !== text) reservationsStatus.textContent = text;
+  } catch (error) {
+    if (run === reservationsRun && !reservationsView.hidden) reservationsStatus.textContent = `Lecture impossible. ${error.message}`;
+  }
+}
+
+// La ligne annulée disparaît : le focus va sur l'annulation de la ligne suivante (ou précédente),
+// sinon sur le titre de la vue, jamais sur le haut de la page.
+async function releaseFromList(listing) {
+  const index = [...reservationsList.children].findIndex((li) => li.dataset.id === listing._id);
+  const { ok, outcome } = await release(listing._id);
+  await loadReservations(ok ? `Réservation de « ${listing.name.trim() || 'Annonce sans titre'} » annulée.` : outcome);
+  const rows = [...reservationsList.children];
+  const target = rows[Math.min(Math.max(index, 0), rows.length - 1)];
+  (target?.querySelector('.danger-outline') ?? reservationsTitle).focus();
+}
+
+// Deux vues, une adresse chacune (#mes-reservations) : le bouton Précédent du navigateur fonctionne.
+const TITLES = { listings: 'Annonces · Listings', reservations: 'Mes réservations · Listings' };
+function showView(moveFocus) {
+  const view = location.hash === '#mes-reservations' ? 'reservations' : 'listings';
+  listingsView.hidden = view !== 'listings';
+  form.hidden = view !== 'listings';
+  reservationsView.hidden = view !== 'reservations';
+  for (const link of document.querySelectorAll('[data-view]')) {
+    if (link.dataset.view === view) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  document.title = TITLES[view];
+  if (view === 'reservations') loadReservations();
+  // Changement de vue sans rechargement : on place le focus pour que le lecteur d'écran l'annonce.
+  if (moveFocus) (view === 'reservations' ? reservationsTitle : listingsView).focus();
+}
+window.addEventListener('hashchange', () => showView(true));
+document.querySelector('.skip').addEventListener('click', (event) => {
+  event.preventDefault();
+  document.querySelector('#contenu').focus();
+});
 
 // Données fictives uniquement : les actions du TP ne touchent jamais les vraies annonces.
 async function createTestListing() {
@@ -361,9 +427,11 @@ function connect() {
   stream.addEventListener('ready', () => {
     setLive('on', 'En direct');
     reload();
+    loadReservations();
   });
   stream.addEventListener('listing-updated', (event) => {
     reload();
+    loadReservations();
     try {
       const change = JSON.parse(event.data);
       if (change.listingId === openId) refreshDetail();
@@ -398,5 +466,6 @@ function stop() {
 window.addEventListener('pagehide', stop);
 window.addEventListener('pageshow', (event) => { if (event.persisted) start(); });
 
+showView(false);
 loadListings();
 start();

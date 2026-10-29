@@ -176,6 +176,37 @@ export function renderDetail(listing, container, { message = '', mine = false, c
   );
 }
 
+// --- Mes réservations ---
+const formatDate = (iso) => (iso ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(iso)) : 'date inconnue');
+
+// Chaque bouton dit l'action et l'annonce concernée : la liste reste compréhensible au lecteur d'écran.
+export function renderReservations(items, list, { onOpen, onRelease } = {}) {
+  list.replaceChildren(...items.map((listing) => {
+    const title = titleOf(listing);
+    const item = el('li', 'reservation');
+    item.dataset.id = listing._id;
+    const place = [listing.address?.market, listing.address?.country].filter(Boolean).join(', ');
+    const body = el('div', 'reservation-body');
+    body.append(
+      el('h3', '', title),
+      el('p', 'card-place', place || 'Lieu inconnu'),
+      el('p', 'card-meta', `Réservée le ${formatDate(listing.reservedAt)} · ${formatPrice(listing.price)}`),
+    );
+    const actions = el('div', 'actions');
+    const open = el('button', '', 'Voir l’annonce');
+    open.type = 'button';
+    open.setAttribute('aria-label', `Voir l’annonce ${title}`);
+    open.addEventListener('click', () => onOpen?.(listing._id));
+    const release = el('button', 'danger-outline', 'Annuler la réservation');
+    release.type = 'button';
+    release.setAttribute('aria-label', `Annuler la réservation de ${title}`);
+    release.addEventListener('click', () => { release.disabled = true; onRelease?.(listing); });
+    actions.append(open, release);
+    item.append(image(listing), body, actions);
+    return item;
+  }));
+}
+
 // --- Formulaire de création / modification ---
 // path : chemin pointé dans le document (address.market) ; utilisé tel quel pour un PATCH partiel.
 const FIELDS = [

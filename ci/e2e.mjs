@@ -192,10 +192,17 @@ try {
 
   // Fermer un abonné ne change pas la règle métier.
   await B.close();
-  await A.eval(`[...document.querySelectorAll('.actions button')].find((b) => b.textContent === 'Annuler la réservation').click()`);
-  await A.waitFor('annulation dans A', `document.querySelector('.message')?.textContent === 'Réservation annulée.'`);
+  // « Mes réservations » : A y retrouve sa réservation et l'annule depuis la liste (bouton nommé avec l'annonce).
+  const row = `document.querySelector('#reservations li[data-id="${id}"]')`;
+  await A.eval(`document.querySelector('#detail').close(); location.hash = '#mes-reservations'; true`);
+  await A.waitFor('A : Mes réservations', `document.title === 'Mes réservations · Listings' && document.activeElement?.id === 'reservations-title' && !!${row} && document.querySelector('[data-view="reservations"]').getAttribute('aria-current') === 'page'`);
+  ok('Mes réservations : titre d’onglet, focus sur le titre de la vue, réservation de A listée');
+  await A.eval(`${row}.querySelector('[aria-label^="Annuler la réservation de "]').click()`);
+  await A.waitFor('annulation depuis la liste', `!${row} && document.querySelector('#reservations-status').textContent.startsWith('Réservation de « ') && document.activeElement?.id === 'reservations-title'`);
   await C.waitFor('C voit la libération', `!${cardBooked(id)}`);
-  ok('B fermé : l’action de A reste acceptée et C est actualisé');
+  ok('B fermé : A annule depuis « Mes réservations » (message annoncé, focus gardé) et C est actualisé');
+  await A.eval(`location.hash = ''; true`);
+  await A.waitFor('A : retour aux annonces', `document.title === 'Annonces · Listings' && !document.querySelector('#listings-view').hidden`);
 
   // CRUD : création, modification visible en direct, conflit d'édition, suppression.
   const name = `E2E CRUD ${Date.now()}`;

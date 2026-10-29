@@ -8,8 +8,13 @@
   <script type="module" src="app.js"></script>
 </head>
 <body>
+  <a href="#contenu" class="skip">Aller au contenu</a>
   <header class="topbar">
     <h1>Listings</h1>
+    <nav class="views" aria-label="Vues">
+      <a href="#" data-view="listings" aria-current="page">Annonces</a>
+      <a href="#mes-reservations" data-view="reservations">Mes réservations <span id="my-count" class="count"></span></a>
+    </nav>
     <span id="live" class="live" data-state="connecting" role="status">Connexion…</span>
     <form id="filters" class="filters" autocomplete="off">
       <input name="q" type="search" placeholder="Rechercher : nom, ville, pays, description…" aria-label="Rechercher dans les annonces">
@@ -46,14 +51,23 @@
     <button id="add-test" type="button" class="secondary">+ Annonce de test</button>
   </header>
 
-  <main>
+  <main id="contenu" tabindex="-1">
+    <section id="listings-view" aria-label="Annonces" tabindex="-1">
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <ul id="list" class="grid"></ul>
     <nav class="pager" aria-label="Pagination">
       <button id="prev" type="button">← Précédent</button>
-      <span id="page-info"></span>
+      <span id="page-info" aria-live="polite"></span>
       <button id="next" type="button">Suivant →</button>
     </nav>
+    </section>
+
+    <section id="reservations-view" aria-labelledby="reservations-title" hidden>
+      <h2 id="reservations-title" tabindex="-1">Mes réservations</h2>
+      <p class="hint">Les réservations faites depuis cet onglet (identité fictive de démonstration, propre à l’onglet).</p>
+      <p id="reservations-status" class="status" role="status"></p>
+      <ul id="reservations" class="reservations"></ul>
+    </section>
   </main>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>

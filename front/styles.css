@@ -60,7 +60,7 @@ body {
 
 button { cursor: pointer; }
 button:disabled { opacity: .4; cursor: default; }
-.filters button { background: var(--accent); border-color: var(--accent); color: #fff; }
+.filters button { background: #c8353c; border-color: #c8353c; color: #fff; } /* blanc sur ce rouge : 5,2:1 (l’accent seul donne 4,03:1) */
 
 main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
 
@@ -214,7 +214,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
 .flash .card { animation: flash 1.5s ease-out; }
 @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } }
 
-.danger { background: var(--error); border-color: var(--error); color: #fff; }
+.danger { background: #b42318; border-color: #b42318; color: #fff; } /* fixe dans les deux thèmes : texte blanc lisible */
 .danger-outline { color: var(--error); border-color: var(--error); }
 .edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 0 24px; }
 .edit-form label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
@@ -231,6 +231,27 @@ main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 40px; }
 .edit-form textarea { min-height: 90px; resize: vertical; }
 .detail > div > h2:first-child { margin-top: 56px; }
 
+[hidden] { display: none !important; }
+[tabindex="-1"]:focus { outline: none; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.skip { position: absolute; left: 12px; top: -60px; z-index: 3; padding: 8px 14px; border-radius: 8px; background: var(--surface); color: var(--text); }
+.skip:focus { top: 12px; }
+
+.views { display: flex; gap: 16px; }
+.views a { color: var(--text); text-decoration: none; padding: 6px 0; font-weight: 600; }
+.views a[aria-current="page"] { color: var(--text); text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.count { color: var(--muted); font-weight: 400; }
+
+#reservations-view h2 { margin: 8px 0 4px; }
+.reservations { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 14px; }
+.reservation { display: grid; grid-template-columns: 160px 1fr auto; gap: 16px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.reservation .thumb { border-radius: 8px; }
+.reservation h3 { margin: 0 0 4px; font-size: 1rem; }
+.reservation p { margin: 2px 0; }
+.reservation .actions { margin: 0; }
+
 @media (max-width: 600px) {
+  .reservation { grid-template-columns: 1fr; }
   .topbar, main { padding-left: 16px; padding-right: 16px; }
 }

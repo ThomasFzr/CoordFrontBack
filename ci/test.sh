@@ -68,12 +68,18 @@ detail=$(curl -sf "$API/listings/ci-new")
 [ "$(jq -r .status <<<"$detail")" = BOOKED ] || fail "statut BOOKED"
 [ "$(jq -r .version <<<"$detail")" = 4 ] || fail "version 4 (création, PATCH, PUT, réservation)"
 [ "$(jq 'has("booking")' <<<"$detail")" = false ] || fail "la réservation (customerId) ne doit pas être publique"
+mes=$(curl -sf "$API/reservations?customerId=client-a")
+[ "$(jq -r '[.data[]._id] | join(",")' <<<"$mes")" = ci-new ] || fail "mes réservations : ci-new pour client-a"
+[ "$(jq '.data[0] | has("booking") or has("customerId")' <<<"$mes")" = false ] || fail "mes réservations sans customerId"
+[ "$(jq -r '.data[0].reservedAt | type' <<<"$mes")" = string ] || fail "mes réservations : date de réservation"
+[ "$(curl -sf "$API/reservations?customerId=client-b" | jq '.data | length')" = 0 ] || fail "mes réservations : rien pour client-b"
+[ "$(code "$API/reservations")" = 400 ] || fail "mes réservations sans customerId 400"
 release() { code -X DELETE "$API/listings/$1/reservations" -d "{\"customerId\":\"$2\"}"; }
 [ "$(release ci-new client-b)" = 403 ] || fail "annulation par un autre client 403"
 [ "$(code -X DELETE "$API/listings/ci-new/reservations" -d '{}')" = 400 ] || fail "annulation sans customerId 400"
 [ "$(release ci-new client-a)" = 204 ] || fail "annulation par le titulaire 204"
 [ "$(release ci-new client-a)" = 404 ] || fail "annulation sans réservation 404"
-ok "réservation : 201, 409, 404, 400 ; annulation réservée au titulaire (403 sinon) ; customerId jamais exposé"
+ok "réservation : 201, 409, 404, 400 ; mes réservations par client ; annulation réservée au titulaire (403 sinon) ; customerId jamais exposé"
 
 [ "$(code -X DELETE "$API/listings/ci-new")" = 204 ] || fail "DELETE 204"
 [ "$(code -X DELETE "$API/listings/ci-new")" = 404 ] || fail "DELETE 404"

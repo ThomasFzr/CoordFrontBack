@@ -151,6 +151,7 @@ app.get('/', (req, res) => {
       'DELETE /listings/:id  (If-Match optionnel)',
       'POST /listings/:id/reservations   { customerId } → 201 | 409 | 404',
       'DELETE /listings/:id/reservations { customerId } → 204 | 403 | 404',
+      'GET /reservations?customerId= → { data } (annonces réservées par ce client, la plus récente d’abord)',
       'GET /events (SSE : ready, listing-updated, : keepalive)',
       'GET /events/stats → { clients } (abonnés connectés à cette instance)',
     ],
@@ -292,6 +293,21 @@ app.post('/listings/:id/reservations', async (req, res) => {
   }
   notifyChanged(winner._id, 'reserved', winner.version);
   res.status(201).json({ listingId: winner._id, status: winner.status, version: winner.version });
+});
+
+// « Mes réservations » : les annonces réservées par ce client. On renvoie la date de réservation,
+// jamais le customerId ni la réservation d'un autre.
+app.get('/reservations', async (req, res) => {
+  const customerId = req.query.customerId;
+  if (typeof customerId !== 'string' || !customerId.trim()) {
+    return res.status(400).json({ error: '"customerId" is required' });
+  }
+  const found = await listings
+    .find({ status: 'BOOKED', 'booking.customerId': customerId }, { projection: { ...LIST_PROJECTION, 'booking.at': 1 } })
+    .sort({ 'booking.at': -1 })
+    .limit(100)
+    .toArray();
+  res.json({ data: found.map(({ booking, ...listing }) => ({ ...listing, reservedAt: booking?.at ?? null })) });
 });
 
 // Seule la personne qui a réservé peut annuler : la règle est vérifiée par l'API, pas par l'interface.
