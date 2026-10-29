@@ -19,6 +19,7 @@ services:
       DATABASE_URL: jdbc:postgresql://db:5432/medislot
       DB_PASSWORD: ${DB_PASSWORD:-medislot-local-only}
       DEMO_SEED: "true"
+      AB_ENABLED: ${AB_ENABLED:-true}
     depends_on:
       db: {condition: service_healthy}
     ports: ["127.0.0.1:18080:8080"]

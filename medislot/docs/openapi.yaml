@@ -351,6 +351,18 @@
               "type": "string"
             },
             "description": "Valeur issue de GET /csrf, à renouveler après connexion."
+          },
+          {
+            "name": "X-AB-Measure",
+            "in": "header",
+            "required": false,
+            "description": "« 1 » si le front a reçu une variante : la réservation peut alors être attribuée au test A/B (exposition dans les 24 h précédentes). Ni authentification ni choix de variante.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
           }
         ],
         "requestBody": {
@@ -912,6 +924,190 @@
             "session": []
           }
         ]
+      }
+    },
+    "/ab/assignment": {
+      "get": {
+        "summary": "Affectation A/B du navigateur (expérience bouton_reserver_v1)",
+        "description": "Pose le cookie opaque ab_visitor (UUID, HttpOnly, SameSite=Lax, 390 jours, jamais prolongé) à la première visite. Réponse jamais mise en cache (Cache-Control: no-store). Expérience arrêtée : enabled=false, variant A, aucun cookie.",
+        "responses": {
+          "200": {
+            "description": "Variante du navigateur",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "experiment",
+                    "enabled",
+                    "variant"
+                  ],
+                  "properties": {
+                    "experiment": {
+                      "type": "string",
+                      "const": "bouton_reserver_v1"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "variant": {
+                      "type": "string",
+                      "enum": [
+                        "A",
+                        "B"
+                      ]
+                    },
+                    "bucket": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ab/exposure": {
+      "post": {
+        "summary": "Déclarer l'exposition (au moins un bouton de réservation disponible rendu)",
+        "description": "Sans corps : le serveur retrouve la variante par le cookie ab_visitor. Seule la première déclaration est enregistrée ; les suivantes répondent aussi 204. Hors CSRF : signal de mesure anonyme.",
+        "responses": {
+          "204": {
+            "description": "Exposition enregistrée ou déjà enregistrée ; aussi quand l'expérience est arrêtée (rien n'est écrit)"
+          },
+          "400": {
+            "description": "Cookie ab_visitor absent ou invalide"
+          },
+          "404": {
+            "description": "Aucune affectation pour ce navigateur"
+          }
+        }
+      }
+    },
+    "/ab/metrics": {
+      "get": {
+        "summary": "Indicateurs de l'expérience (agrégés, aucune donnée individuelle)",
+        "responses": {
+          "200": {
+            "description": "Indicateurs par variante, contrôle de répartition et comparaison",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "experiment",
+                    "enabled",
+                    "variants",
+                    "srm"
+                  ],
+                  "properties": {
+                    "experiment": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "variants": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "variant",
+                          "assigned",
+                          "exposed",
+                          "converted",
+                          "bookings",
+                          "rate"
+                        ],
+                        "properties": {
+                          "variant": {
+                            "type": "string",
+                            "enum": [
+                              "A",
+                              "B"
+                            ]
+                          },
+                          "assigned": {
+                            "type": "integer"
+                          },
+                          "exposed": {
+                            "type": "integer"
+                          },
+                          "converted": {
+                            "type": "integer",
+                            "description": "Navigateurs exposés ayant au moins une réservation attribuée (unité : navigateur)"
+                          },
+                          "bookings": {
+                            "type": "integer",
+                            "description": "Réservations attribuées"
+                          },
+                          "rate": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "description": "converted / exposed ; null sans exposé"
+                          }
+                        }
+                      }
+                    },
+                    "srm": {
+                      "type": "object",
+                      "required": [
+                        "chi2",
+                        "pValue",
+                        "alert"
+                      ],
+                      "properties": {
+                        "chi2": {
+                          "type": "number"
+                        },
+                        "pValue": {
+                          "type": "number"
+                        },
+                        "alert": {
+                          "type": "boolean",
+                          "description": "Répartition des exposés incompatible avec 50/50 (p < 0,001) : ne rien conclure"
+                        }
+                      }
+                    },
+                    "comparison": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "diffPoints": {
+                          "type": "number"
+                        },
+                        "ciLowPoints": {
+                          "type": "number"
+                        },
+                        "ciHighPoints": {
+                          "type": "number"
+                        },
+                        "relativePercent": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "pValue": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

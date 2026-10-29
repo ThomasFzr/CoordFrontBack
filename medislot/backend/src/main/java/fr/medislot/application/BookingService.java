@@ -1,4 +1,5 @@
 package fr.medislot.application;
+import fr.medislot.ab.AbService;
 import fr.medislot.domain.*;
 import fr.medislot.repository.*;
 import java.time.Instant;
@@ -11,16 +12,20 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class BookingService {
  private final UserRepository users; private final SlotRepository slots; private final AppointmentRepository appointments;
- private final AuditRepository audit; private final NotificationRepository notifications; private final ApplicationEventPublisher events;
- public BookingService(UserRepository u,SlotRepository s,AppointmentRepository a,AuditRepository h,NotificationRepository n,ApplicationEventPublisher e){users=u;slots=s;appointments=a;audit=h;notifications=n;events=e;}
+ private final AuditRepository audit; private final NotificationRepository notifications; private final ApplicationEventPublisher events; private final AbService ab;
+ public BookingService(UserRepository u,SlotRepository s,AppointmentRepository a,AuditRepository h,NotificationRepository n,ApplicationEventPublisher e,AbService ab){users=u;slots=s;appointments=a;audit=h;notifications=n;events=e;this.ab=ab;}
  public Long patient(String email){return users.findByEmail(email).orElseThrow().id;}
  private ResponseStatusException conflict(){return new ResponseStatusException(HttpStatus.CONFLICT,"Ce créneau n’est plus disponible. Choisissez-en un autre.");}
  private Slot lock(Long id){return slots.lockById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Créneau introuvable."));}
  private void check(Slot s){if(!s.startsAt.isAfter(Instant.now())||appointments.existsBySlotIdAndStatus(s.id,"CONFIRMED"))throw conflict();}
  private Appointment owned(Long id,Long patient){var a=appointments.lockById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Rendez-vous introuvable."));if(!a.patientId.equals(patient))throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Rendez-vous introuvable.");return a;}
- @Transactional public Appointment book(String email,Long slotId){
+ @Transactional public Appointment book(String email,Long slotId){return book(email,slotId,null);}
+ /** abSubject : identifiant du test A/B, seulement si le front mesure. La conversion est écrite dans la même
+  *  transaction que le rendez-vous : un 409 ou une erreur n'en laisse aucune. */
+ @Transactional public Appointment book(String email,Long slotId,UUID abSubject){
   Long patient=patient(email); Slot s=lock(slotId);check(s);
   Appointment a=new Appointment();a.patientId=patient;a.slotId=s.id;a.status="CONFIRMED";a.createdAt=Instant.now();appointments.saveAndFlush(a);
+  ab.attribute(abSubject,a.id);
   record(a,"CREATED","Votre rendez-vous est confirmé.");events.publishEvent(new BookingChanged(patient,List.of(s.professionalId)));return a;
  }
  @Transactional public Appointment cancel(String email,Long id){

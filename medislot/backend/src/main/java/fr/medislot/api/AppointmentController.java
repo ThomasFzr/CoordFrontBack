@@ -1,4 +1,5 @@
 package fr.medislot.api;
+import fr.medislot.ab.AbController;
 import fr.medislot.application.BookingService;
 import fr.medislot.domain.*;
 import fr.medislot.repository.*;
@@ -20,7 +21,11 @@ public class AppointmentController {
  public record NotificationDto(Long id,String message,Instant createdAt){}
  private AppointmentDto dto(Appointment a){Slot s=slots.findById(a.slotId).orElseThrow();Professional p=professionals.findById(s.professionalId).orElseThrow();return new AppointmentDto(a.id,s.id,p.id,p.name,p.specialty,p.address,p.city,s.startsAt,a.status);}
  @GetMapping("/appointments") public java.util.List<AppointmentDto> list(Principal p){return appointments.findByPatientIdOrderByCreatedAtDesc(service.patient(p.getName())).stream().map(this::dto).toList();}
- @PostMapping("/appointments") public ResponseEntity<AppointmentDto> book(Principal p,@Valid @RequestBody BookingRequest r){var a=service.book(p.getName(),r.slotId());return ResponseEntity.created(java.net.URI.create("/api/appointments/"+a.id)).body(dto(a));}
+ /** X-AB-Measure : le front ne l'envoie que si une variante a vraiment été reçue (pas en mode de secours).
+  *  Ce n'est ni une authentification ni un choix de variante : celle-ci est relue côté serveur. */
+ @PostMapping("/appointments") public ResponseEntity<AppointmentDto> book(Principal p,@Valid @RequestBody BookingRequest r,
+   @CookieValue(name=AbController.COOKIE,required=false) String abVisitor,@RequestHeader(name="X-AB-Measure",required=false) String abMeasure){
+  var a=service.book(p.getName(),r.slotId(),"1".equals(abMeasure)?AbController.uuid(abVisitor):null);return ResponseEntity.created(java.net.URI.create("/api/appointments/"+a.id)).body(dto(a));}
  @GetMapping("/appointments/{id}") public AppointmentDto one(Principal p,@PathVariable Long id){return dto(owned(p,id));}
  private Appointment owned(Principal p,Long id){return appointments.findById(id).filter(a->a.patientId.equals(service.patient(p.getName()))).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Rendez-vous introuvable."));}
  @PostMapping("/appointments/{id}/cancel") public AppointmentDto cancel(Principal p,@PathVariable Long id){return dto(service.cancel(p.getName(),id));}

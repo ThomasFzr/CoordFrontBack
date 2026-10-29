@@ -1,14 +1,20 @@
-name: Vérifier MediSlot
+name: medislot
+
 on:
-  workflow_call:
   push:
     branches: [main]
+    paths: ["medislot/**", ".github/workflows/medislot.yml"]
   pull_request:
+    paths: ["medislot/**", ".github/workflows/medislot.yml"]
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: medislot-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -17,41 +23,39 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: {persist-credentials: false}
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
-        with: {distribution: temurin, java-version: '25', cache: maven}
+        with: {distribution: temurin, java-version: '25', cache: maven, cache-dependency-path: medislot/backend/pom.xml}
       - name: Compiler, tester avec PostgreSQL et empaqueter
-        run: mvn -B -f backend/pom.xml verify
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: backend
-          path: backend/target/medislot.jar
+        run: mvn -B -f medislot/backend/pom.xml verify
       - name: Rapports Java
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: {name: java-tests, path: backend/target/surefire-reports}
+        with: {name: medislot-java-tests, path: medislot/backend/target/surefire-reports}
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
-      run: {working-directory: frontend}
+      run: {working-directory: medislot/frontend}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: {persist-credentials: false}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: {node-version: '24', cache: npm, cache-dependency-path: frontend/package-lock.json}
+        with: {node-version: '24', cache: npm, cache-dependency-path: medislot/frontend/package-lock.json}
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: {name: frontend, path: frontend/dist}
+
   end-to-end:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    defaults:
+      run: {working-directory: medislot}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: {persist-credentials: false}
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: {node-version: '24', cache: npm, cache-dependency-path: frontend/package-lock.json}
+        with: {node-version: '24', cache: npm, cache-dependency-path: medislot/frontend/package-lock.json}
       - run: docker compose up -d --build
       - name: Attendre le serveur
         run: |
@@ -60,15 +64,22 @@ jobs:
             sleep 2
           done
           exit 1
+      - name: Test A/B au niveau HTTP (TP étapes 2, 4 et 5)
+        run: ci/ab-smoke.sh http://localhost:8088
       - run: npm ci && npx playwright install --with-deps chromium && npm run test:e2e
-        working-directory: frontend
+        working-directory: medislot/frontend
+      - name: Arrêt de l'expérience (TP étape 7), données conservées
+        run: |
+          AB_ENABLED=false docker compose up -d backend
+          for i in $(seq 1 60); do curl -sf http://localhost:18080/actuator/health >/dev/null && break; sleep 2; done
+          ci/ab-smoke.sh http://localhost:8088 --disabled
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: {name: navigateur, path: frontend/playwright-report}
+        with: {name: medislot-navigateur, path: medislot/frontend/playwright-report}
       - if: always()
         run: docker compose logs --no-color > compose.log
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: {name: services, path: compose.log}
+        with: {name: medislot-services, path: medislot/compose.log}
       - if: always()
         run: docker compose down

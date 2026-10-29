@@ -9,7 +9,7 @@ addFormats(ajv);
 ajv.addSchema(contract,'medislot');
 
 test('les réponses publiques respectent le contrat OpenAPI',async({request})=>{
- for(const [route,path] of [['/professionals?page=0&size=2','/professionals'],['/professionals/1','/professionals/{id}'],['/professionals/1/slots','/professionals/{id}/slots']]){
+ for(const [route,path] of [['/professionals?page=0&size=2','/professionals'],['/professionals/1','/professionals/{id}'],['/professionals/1/slots','/professionals/{id}/slots'],['/ab/assignment','/ab/assignment'],['/ab/metrics','/ab/metrics']]){
   const response=await request.get('/api'+route);
   expect(response.status()).toBe(200);
   const schema=contract.paths[path].get.responses['200'].content['application/json'].schema;

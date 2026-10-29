@@ -1,8 +1,11 @@
 name: ci
 
 on:
+  # MediSlot a sa propre CI (medislot.yml) : un changement limité à medislot/ ne relance pas celle-ci.
   push:
+    paths-ignore: ["medislot/**", ".github/workflows/medislot.yml"]
   pull_request:
+    paths-ignore: ["medislot/**", ".github/workflows/medislot.yml"]
   schedule:
     # Relevé quotidien du baromètre (03:00 UTC), même sans push.
     - cron: "0 3 * * *"

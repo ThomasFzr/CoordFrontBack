@@ -13,8 +13,10 @@ public class SecurityConfig {
  @Bean UserDetailsService users(UserRepository users){return email -> users.findByEmail(email.toLowerCase(java.util.Locale.ROOT)).map(u->User.withUsername(u.email).password(u.password).roles(u.role).build()).orElseThrow(()->new UsernameNotFoundException("Identité inconnue"));}
  @Bean SecurityFilterChain filter(HttpSecurity http) throws Exception {
   http.authorizeHttpRequests(a->a.dispatcherTypeMatchers(DispatcherType.ASYNC,DispatcherType.ERROR).permitAll()
-    .requestMatchers("/api/csrf","/api/register","/api/login","/api/professionals/**","/api/events","/actuator/health").permitAll()
+    .requestMatchers("/api/csrf","/api/register","/api/login","/api/professionals/**","/api/events","/api/ab/**","/actuator/health").permitAll()
     .requestMatchers("/api/**").authenticated().anyRequest().permitAll())
+   // Signal de mesure anonyme : le cookie ab_visitor (SameSite=Lax) n'est pas envoyé par un POST d'un autre site.
+   .csrf(c->c.ignoringRequestMatchers("/api/ab/exposure"))
    .requestCache(c->c.disable())
    .formLogin(f->f.loginProcessingUrl("/api/login")
     .successHandler((req,res,auth)->res.setStatus(204))

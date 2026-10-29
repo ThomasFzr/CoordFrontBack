@@ -25,3 +25,6 @@ management:
         include: health,info
 medislot:
   demo-seed: ${DEMO_SEED:true}
+  ab:
+    # false : tout le monde voit A, aucune affectation ni mesure (les données déjà collectées sont conservées)
+    enabled: ${AB_ENABLED:true}

@@ -54,7 +54,7 @@ Docker doit fonctionner pour les tests PostgreSQL Testcontainers. Les tests bout
 
 ## GitHub Actions
 
-Faire de **ce dossier application** la racine du dépôt GitHub. `ci.yml` contient les jobs back, front et bout en bout. `release.yml` relance la vérification puis construit des images téléchargeables à la demande si les tests réussissent. Les actions sont épinglées à des commits et Dependabot propose les mises à jour.
+Dans ce dépôt, MediSlot est un sous-dossier : sa CI est `.github/workflows/medislot.yml` à la racine du dépôt (jobs back, front et bout en bout, plus la vérification HTTP du test A/B). Elle ne se lance que si `medislot/` change. `release.yml` et Dependabot ne sont pas repris. `release.yml` relance la vérification puis construit des images téléchargeables à la demande si les tests réussissent. Les actions sont épinglées à des commits et Dependabot propose les mises à jour.
 
 Les workflows n’ont pas été exécutés sur un dépôt GitHub distant pendant la fabrication du support. Les commandes de compilation, tests et Compose ont été exécutées localement. Le déploiement vers un hébergeur nécessite sa configuration et ses secrets. Paramétrer les règles de protection de `main`, les checks requis et les reviewers de l’environnement `staging` dans GitHub.
 
@@ -65,6 +65,10 @@ Le projet privilégie des fichiers courts et des responsabilités identifiables.
 L’index unique partiel PostgreSQL et les verrous protègent la réservation. La création répétée renvoie un conflit, sans cache durable de clés d’idempotence. Le listener SSE est local au processus. La reconnexion relit l’état, sans rejeu historique. Une outbox et un bus partagé sont des approfondissements documentés.
 
 Les comptes fictifs, HTTP local, données d’amorçage et mots de passe de base sont réservés à la formation. Avant toute exploitation réelle : terminer le durcissement, retirer l’amorçage, configurer les secrets, HTTPS et les cookies Secure, traiter la révocation SSE immédiate, les limites de connexions, le contrôle des tentatives, les sauvegardes et le contexte réglementaire. Aucune donnée réelle de santé ne doit être ajoutée au laboratoire.
+
+## Test A/B du bouton de réservation
+
+Expérience `bouton_reserver_v1` : « Réserver » (A) ou « Choisir ce créneau » (B) sous les créneaux de chaque praticien. Affectation stable par navigateur, exposition et conversions comptées une fois, indicateurs sur http://localhost:8088/api/ab/metrics. Arrêt sans perte de données avec `AB_ENABLED=false docker compose up -d backend`. Détails, fiche d'expérience et vérifications : `docs/ab-testing.md`.
 
 ## Repères
 
