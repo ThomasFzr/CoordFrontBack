@@ -4,6 +4,11 @@
 // - Jamais en cache : écritures, flux SSE, test A/B, CSRF. Une réservation hors ligne est gérée par la page (file d'envoi).
 const VERSION='v1';
 const SHELL=`medislot-shell-${VERSION}`,API=`medislot-api-${VERSION}`;
+// Au-delà, une lecture bascule sur la dernière réponse de l'appareil (réseau très lent ou serveur muet).
+const NETWORK_TIMEOUT_MS=4000;
+// Après un échec, le serveur est considéré indisponible quelques secondes : les lectures suivantes sont servies
+// depuis le cache sans attendre, au lieu de payer le délai du proxy à chaque requête.
+const DOWN_MS=5000;let downUntil=0;
 const CACHED_API=/^\/api\/(professionals(\/\d+(\/slots)?)?|appointments|notifications|me)$/;
 
 self.addEventListener('install',event=>{event.waitUntil((async()=>{
@@ -30,13 +35,17 @@ self.addEventListener('fetch',event=>{
 
 async function networkFirst(request,cacheName,key=request){
  const cache=await caches.open(cacheName);
+ if(Date.now()<downUntil){const cached=await cachedCopy(cache,key);if(cached)return cached;}
  try{
-  const response=await fetch(request);
+  const response=await fetch(request,{signal:AbortSignal.timeout(NETWORK_TIMEOUT_MS)});
   if(response.ok)await cache.put(key,response.clone());
   // 502-504 : le proxy répond mais le serveur est injoignable, comme hors ligne pour la personne.
   if(response.status<502||response.status>504)return response;
+  downUntil=Date.now()+DOWN_MS;
   return (await cachedCopy(cache,key))??response;
  }catch(error){
+  // Navigateur hors ligne : l'échec est immédiat, inutile de court-circuiter. Délai dépassé : serveur muet.
+  if(error?.name==='TimeoutError')downUntil=Date.now()+DOWN_MS;
   const cached=await cachedCopy(cache,key);
   if(!cached)throw error;
   return cached;

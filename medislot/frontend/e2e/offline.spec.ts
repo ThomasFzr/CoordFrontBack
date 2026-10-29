@@ -58,3 +58,29 @@ test('créneau pris pendant la coupure : la personne est prévenue, rien n’est
  await expect(page.getByText(/a été pris pendant que vous étiez hors ligne\. Choisissez-en un autre\./)).toBeVisible();
  await expect(page.getByText('En attente d’envoi · non confirmé')).toHaveCount(0);
 });
+
+// Panne du serveur avec réseau présent : pas d'événement « online », le flux SSE et le filet de 15 s doivent
+// relancer l'envoi ; le redémarrage efface les sessions (en mémoire), il faut donc se reconnecter.
+test('serveur arrêté puis redémarré : file conservée, reconnexion demandée, puis envoi',async({page})=>{
+ test.skip(!process.env.E2E_DOCKER,'arrête le conteneur backend : E2E_DOCKER=1 requis');
+ test.setTimeout(150_000);
+ const {execSync}=await import('node:child_process');
+ const compose=(action:string)=>execSync(`docker compose ${action} backend`,{cwd:new URL('../..',import.meta.url).pathname,stdio:'ignore'});
+ await warmUp(page);
+ try{
+  compose('stop');
+  const started=Date.now();await page.reload();
+  await expect(page.locator('.doctor-card .slot').first()).toBeVisible({timeout:15_000});
+  expect(Date.now()-started,'page utilisable rapidement malgré la panne').toBeLessThan(10_000);
+  await expect(page.getByText(/^Vous êtes hors ligne\./)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Camille · Déconnexion'})).toBeVisible();
+  await bookOffline(page,4);
+ }finally{compose('start');}
+ await expect(page.getByRole('dialog').getByText('Heureux de vous retrouver')).toBeVisible({timeout:90_000});
+ await expect(page.getByText('Reconnectez-vous pour envoyer votre demande en attente.')).toBeVisible();
+ await page.getByLabel('Adresse e-mail',{exact:true}).fill('patient@medislot.test');await page.getByLabel('Mot de passe',{exact:true}).fill('MediSlot-demo-2026!');
+ await page.getByRole('dialog').getByRole('button',{name:'Se connecter',exact:true}).click();
+ await expect(page.getByText(/Votre rendez-vous du .* est confirmé\./)).toBeVisible({timeout:20_000});
+ await page.getByRole('button',{name:'Trouver un praticien'}).click();
+ await expect(page.getByText('Disponibilités en direct'),'le direct se rétablit seul').toBeVisible({timeout:20_000});
+});

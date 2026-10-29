@@ -37,6 +37,9 @@ async function flushOutbox(){
  pendingNotice.value='';
  if(ok.length)success.value=ok.map(r=>`Votre rendez-vous ${when(r)} est confirmé.`).join(' ');
  if(ko.length)error.value=ko.map(r=>r.outcome==='taken'?`Le créneau ${when(r)} a été pris pendant que vous étiez hors ligne. Choisissez-en un autre.`:r.outcome==='login'?'Reconnectez-vous pour envoyer votre demande en attente.':`La demande ${when(r)} a été refusée : ${r.message??'erreur inconnue'}.`).join(' ');
+ // Session perdue (expirée, ou serveur redémarré) : on le montre et on propose de se reconnecter ; la demande reste en file
+ // et part dès la connexion (watch sur session.user).
+ if(results.some(r=>r.outcome==='login')){session.user=null;personalLive.close();openAuth();return;}
  await Promise.allSettled([refreshAppointments(),refreshNotices(),loadSlots()]);
 }
 async function confirm(){if(!chosen.value)return;busy.value=true;error.value='';
@@ -49,7 +52,9 @@ async function logout(){try{await session.logout();const dropped=pendingMine.val
 function openAuth(){authOpen.value=true;authError.value='';register.value=false;}
 function myAppointments(){if(!session.user){openAuth();return;}view.value='appointments';refreshAppointments().catch(e=>error.value=message(e));}
 watch(()=>session.user, user=>{personalLive.close();if(user){flushOutbox();refreshNotices().catch(()=>{});personalLive.connect('/api/notifications/events',()=>{refreshNotices().catch(()=>{});refreshAppointments().catch(()=>{})},'notifications-changed')}});
-window.addEventListener('online',()=>{online.value=true;flushOutbox();});window.addEventListener('offline',()=>{online.value=false;});
+window.addEventListener('online',()=>{online.value=true;flushOutbox();});
+// Filet de sécurité : serveur revenu sans changement d'état réseau ni reconnexion SSE observée.
+setInterval(()=>{if(pendingMine.value.length&&navigator.onLine)flushOutbox();},15000);window.addEventListener('offline',()=>{online.value=false;});
 window.addEventListener('medislot:cached-data',()=>{cachedData.value=true;});window.addEventListener('medislot:fresh-data',()=>{cachedData.value=false;});
 onMounted(async()=>{experiment.load();await search();try{await session.load()}catch(e){error.value=message(e)}live.connect('/api/events',()=>{loadSlots().catch(()=>{});flushOutbox();});});
 </script>

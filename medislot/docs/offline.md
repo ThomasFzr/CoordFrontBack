@@ -29,6 +29,16 @@ une demande après l'autre, avec le même en-tête `X-AB-Measure` que si elle é
 | Toujours injoignable | La demande reste en file, nouvel essai au prochain déclencheur. |
 | Autre refus | La demande est retirée et la raison affichée. |
 
+## Serveur en panne, réseau présent
+
+| Mécanisme | Effet |
+|---|---|
+| Nginx `proxy_connect_timeout 2s` | Le proxy répond 502/504 en 2 s au lieu d'attendre ≈ 14 s par requête. |
+| Service worker : délai de 4 s, puis 5 s « serveur indisponible » | Une lecture lente bascule sur le cache ; après un échec, les lectures suivantes sont servies depuis le cache sans attendre. Page utilisable en ≈ 2 s pendant la panne. |
+| Flux SSE recréé | Une réponse non-SSE (502-504) fait abandonner `EventSource` : `useLive` recrée le flux toutes les 3 s jusqu'au retour du serveur. |
+| Nouvel essai toutes les 15 s | Tant qu'une demande attend, l'envoi est retenté même sans événement `online` ni reconnexion SSE. |
+| Session perdue (401) | Le serveur garde les sessions en mémoire : après un redémarrage, la page repasse « non connectée », ouvre la connexion, et la demande part dès la reconnexion. |
+
 ## Limites et choix
 
 - Les créneaux affichés hors ligne peuvent ne plus être libres : seul le serveur tranche, d'où le 409
@@ -43,9 +53,13 @@ une demande après l'autre, avec le même en-tête `X-AB-Measure` que si elle é
 
 ```sh
 cd frontend && npm test                                     # outbox.test.ts : 201, 409, 401, 502, hors ligne, une file par personne
-cd frontend && PW_CHANNEL=chrome npx playwright test e2e/offline.spec.ts
+cd frontend && PW_CHANNEL=chrome E2E_DOCKER=1 npx playwright test e2e/offline.spec.ts   # E2E_DOCKER : arrête et relance le conteneur backend
 ```
 
 À la main : se connecter, ouvrir « Mes rendez-vous », puis DevTools → Network → **Offline**. Recharger la
 page : elle s'affiche avec le bandeau. Réserver un créneau : la demande apparaît « En attente d'envoi ».
 Repasser **No throttling** : le message de confirmation s'affiche sans rien faire.
+
+Panne du serveur : `docker compose stop backend`, recharger (bandeau, données de l'appareil), réserver
+(« En attente d'envoi »), puis `docker compose start backend` sans toucher à la page : la connexion est
+proposée (session perdue au redémarrage) et la demande est confirmée après reconnexion.
