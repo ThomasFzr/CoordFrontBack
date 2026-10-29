@@ -74,6 +74,18 @@ Expérience `bouton_reserver_v1` : « Réserver » (A) ou « Choisir ce créneau
 
 L'application construite reste consultable sans réseau (dernières données de l'appareil) et une réservation demandée hors ligne est envoyée au retour de la connexion, jamais présentée comme confirmée avant la réponse du serveur. Détails et vérifications : `docs/offline.md`.
 
+## Accessibilité (RGAA)
+
+Le parcours de réservation se fait au clavier seul et au lecteur d'écran :
+
+- un titre d'onglet par vue, et le focus sur le h1 à chaque changement de vue ;
+- un lien d'évitement vers la recherche, et un focus visible à 13:1 ;
+- une fenêtre modale qui garde le focus et le rend à l'élément d'origine ;
+- des erreurs du serveur affichées sous le champ concerné ;
+- des messages annoncés par des régions toujours présentes, et des contrastes à 4,5:1 pour le texte et 3:1 pour les composants.
+
+La preuve est `frontend/e2e/a11y.spec.ts` (Playwright et axe-core) ; le relevé avant/après est dans `RECETTE.md`.
+
 ## Repères
 
 `docs/openapi.yaml` : contrat. `docs/architecture.md` : structure et flux. `docs/adr` : décisions. `docs/runbook.md` : diagnostic. `docs/TP.md` : progression et défis. `docs/diagrammes` : Mermaid et PlantUML. La racine de la formation contient les PowerPoint, sources, activités et livrets.

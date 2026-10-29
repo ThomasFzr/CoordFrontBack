@@ -77,7 +77,7 @@ test('serveur arrêté puis redémarré : file conservée, reconnexion demandée
   await bookOffline(page,4);
  }finally{compose('start');}
  await expect(page.getByRole('dialog').getByText('Heureux de vous retrouver')).toBeVisible({timeout:90_000});
- await expect(page.getByText('Reconnectez-vous pour envoyer votre demande en attente.')).toBeVisible();
+ await expect(page.getByRole('dialog').getByText('Reconnectez-vous pour envoyer votre demande en attente.')).toBeVisible();
  await page.getByLabel('Adresse e-mail',{exact:true}).fill('patient@medislot.test');await page.getByLabel('Mot de passe',{exact:true}).fill('MediSlot-demo-2026!');
  await page.getByRole('dialog').getByRole('button',{name:'Se connecter',exact:true}).click();
  await expect(page.getByText(/Votre rendez-vous du .* est confirmé\./)).toBeVisible({timeout:20_000});

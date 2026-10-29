@@ -13,7 +13,11 @@ public class AuthController {
  private final UserRepository users; private final PasswordEncoder encoder;
  public AuthController(UserRepository users,PasswordEncoder encoder){this.users=users;this.encoder=encoder;}
  public record Identity(Long id,String name,String email,String role){}
- public record Registration(@Email @NotBlank @Size(max=254) String email,@NotBlank @Size(min=12,max=72) String password,@NotBlank @Size(max=120) String name){}
+ // Messages en français qui disent la règle : le front les affiche sous le champ concerné (RGAA 11.10, 11.11).
+ public record Registration(
+  @Email(message="Adresse e-mail attendue, par exemple nom@exemple.fr.") @NotBlank(message="Indiquez votre adresse e-mail.") @Size(max=254,message="254 caractères au plus.") String email,
+  @NotBlank(message="Indiquez un mot de passe.") @Size(min=12,max=72,message="12 caractères au moins, 72 au plus.") String password,
+  @NotBlank(message="Indiquez votre nom.") @Size(max=120,message="120 caractères au plus.") String name){}
  @GetMapping("/csrf") public java.util.Map<String,String> csrf(CsrfToken token){return java.util.Map.of("token",token.getToken(),"headerName",token.getHeaderName());}
  @GetMapping("/me") public Identity me(java.security.Principal principal){AppUser u=users.findByEmail(principal.getName()).orElseThrow();return new Identity(u.id,u.name,u.email,u.role);}
  @PostMapping("/register") @ResponseStatus(HttpStatus.CREATED)
