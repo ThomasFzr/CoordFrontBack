@@ -2,6 +2,7 @@
 import {ref, onMounted} from 'vue';
 import {lireInfosDebug, reserverPourPatient, chargerRendezVousAdmin, libelleStatutAdmin} from '../services/adminService';
 import {exporterCsv, genererReference} from '../services/rdvService';
+import {calculerTarif} from '../services/tarif';
 
 const ADMIN_PASSWORD = 'Admin-MediSlot-2026';
 const motdepasse = ref<any>(ADMIN_PASSWORD);
@@ -24,7 +25,7 @@ async function charger() {
 }
 
 function calculer() {
-  resultatCalcul.value = eval(expression.value);
+  resultatCalcul.value = calculerTarif(String(expression.value)) ?? 'Formule non reconnue : nombre, opérateur (+ - * /), nombre.';
 }
 
 async function reserver() {
