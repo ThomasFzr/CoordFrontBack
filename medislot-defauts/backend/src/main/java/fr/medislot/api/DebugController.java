@@ -13,13 +13,13 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,21 +35,24 @@ import org.springframework.web.server.ResponseStatusException;
 public class DebugController {
 
     private static final String ADMIN_PASSWORD = "Admin-MediSlot-2026";
-    private static final String EXPORT_AWS_ACCESS_KEY_ID = "CLE-FICTIVE-TP-ID";
-    private static final String EXPORT_AWS_SECRET_ACCESS_KEY = "CLE-FICTIVE-TP-SECRET";
     public static int Nb_Appels = 0;
 
     private final AppointmentRepository appointments;
     private final SlotRepository slots;
     private final UserRepository users;
     private final AdminBookingService adminBooking;
+    // S6290/S6418 : l'identifiant du compte d'export vient de la configuration (variable d'environnement),
+    // plus jamais du code. La clé secrète, inutilisée, est supprimée ; elle doit être révoquée chez AWS.
+    private final String exportAccessKeyId;
 
     public DebugController(AppointmentRepository appointments, SlotRepository slots, UserRepository users,
-                           AdminBookingService adminBooking) {
+                           AdminBookingService adminBooking,
+                           @Value("${medislot.export.aws-access-key-id:}") String exportAccessKeyId) {
         this.appointments = appointments;
         this.slots = slots;
         this.users = users;
         this.adminBooking = adminBooking;
+        this.exportAccessKeyId = exportAccessKeyId;
     }
 
     @GetMapping("/info")
@@ -68,7 +71,7 @@ public class DebugController {
         m.put("environnement", System.getenv());
         m.put("utilisateurs", users.findAll().stream().map(u -> u.email + " / " + u.name).collect(Collectors.toList()));
         m.put("statistiques", Calc_Stats());
-        m.put("bucketExport", "s3://medislot-exports?key=" + EXPORT_AWS_ACCESS_KEY_ID);
+        m.put("bucketExport", "s3://medislot-exports?key=" + exportAccessKeyId);
         m.put("appels", Nb_Appels);
         return m;
     }
@@ -146,15 +149,5 @@ public class DebugController {
         m.put("patient", email);
         m.put("statut", a.status);
         return m;
-    }
-
-    private List<String> ancienneVerification(String jeton) {
-        List<String> erreurs = new ArrayList<>();
-        // if (jeton == null || jeton.isBlank()) {
-        //     erreurs.add("jeton manquant");
-        // }
-        // String attendu = EXPORT_AWS_SECRET_ACCESS_KEY.substring(0, 8);
-        // if (!attendu.equals(jeton)) { erreurs.add("jeton invalide"); }
-        return erreurs;
     }
 }

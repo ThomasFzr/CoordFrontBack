@@ -33,5 +33,7 @@ management:
       show-values: ALWAYS
 medislot:
   demo-seed: ${DEMO_SEED:true}
+  export:
+    aws-access-key-id: ${EXPORT_AWS_ACCESS_KEY_ID:}
   admin-password: Admin-MediSlot-2026
   jwt-secret: c2VjcmV0LW1lZGlzbG90LXByb2QtbmUtcGFzLWNvbW1pdHRlcg==
