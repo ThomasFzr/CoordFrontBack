@@ -70,6 +70,10 @@ Les comptes fictifs, HTTP local, données d’amorçage et mots de passe de base
 
 Expérience `bouton_reserver_v1` : « Réserver » (A) ou « Choisir ce créneau » (B) sous les créneaux de chaque praticien. Affectation stable par navigateur, exposition et conversions comptées une fois, indicateurs sur http://localhost:8088/api/ab/metrics. Arrêt sans perte de données avec `AB_ENABLED=false docker compose up -d backend`. Détails, fiche d'expérience et vérifications : `docs/ab-testing.md`.
 
+## Hors ligne
+
+L'application construite reste consultable sans réseau (dernières données de l'appareil) et une réservation demandée hors ligne est envoyée au retour de la connexion, jamais présentée comme confirmée avant la réponse du serveur. Détails et vérifications : `docs/offline.md`.
+
 ## Repères
 
 `docs/openapi.yaml` : contrat. `docs/architecture.md` : structure et flux. `docs/adr` : décisions. `docs/runbook.md` : diagnostic. `docs/TP.md` : progression et défis. `docs/diagrammes` : Mermaid et PlantUML. La racine de la formation contient les PowerPoint, sources, activités et livrets.

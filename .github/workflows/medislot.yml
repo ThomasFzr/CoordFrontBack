@@ -60,7 +60,7 @@ jobs:
       - name: Attendre le serveur
         run: |
           for i in $(seq 1 60); do
-            curl --fail http://localhost:18080/actuator/health && exit 0
+            curl -sf http://localhost:18080/actuator/health && curl -sf -o /dev/null http://localhost:8088/ && exit 0
             sleep 2
           done
           exit 1
