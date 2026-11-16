@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+  Modèle de la convocation MediSlot, relu à deux (mise en page : front · données : back).
+  Contrat : ConvocationView, exposé sous le nom « c ». Uniquement des th:text : aucun calcul,
+  aucun formatage de date ici (l'heure de Paris est calculée et testée dans ConvocationFormats).
+  Le moteur (Open HTML to PDF) exige un HTML bien formé et comprend CSS 2.1 + @page : pas de flex ni de grid.
+-->
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <title th:text="'Convocation ' + ${c.reference}">Convocation</title>
+  <meta name="subject" content="Convocation à un rendez-vous MediSlot" />
+  <meta name="author" content="MediSlot" />
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 18mm 22mm;
+      @bottom-center {
+        content: "MediSlot · page " counter(page) " sur " counter(pages);
+        font-family: 'DejaVu Sans'; font-size: 8pt; color: #526b7c;
+      }
+    }
+    * { font-family: 'DejaVu Sans'; }
+    body { color: #17334a; font-size: 10.5pt; line-height: 1.45; }
+    .brand { color: #0873b9; font-size: 20pt; font-weight: 700; margin: 0; }
+    .ref { color: #526b7c; font-size: 9pt; margin: 2mm 0 0; }
+    h1 { font-size: 16pt; margin: 10mm 0 2mm; }
+    .lead { margin: 0 0 6mm; }
+    .when { border: 1px solid #b0d8e5; background: #e7f3f7; padding: 5mm 6mm; margin: 0 0 7mm;
+            page-break-inside: avoid; }
+    .when p { margin: 0; }
+    .when .date { font-size: 14pt; font-weight: 700; color: #07598f; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 8mm; }
+    th { width: 34%; text-align: left; font-weight: 700; vertical-align: top; padding: 2.5mm 0;
+         border-bottom: 1px solid #dce6ed; }
+    td { padding: 2.5mm 0; border-bottom: 1px solid #dce6ed; }
+    h2 { font-size: 12pt; margin: 0 0 2mm; }
+    ul { margin: 0 0 6mm; padding-left: 5mm; }
+    .note { color: #526b7c; font-size: 8.5pt; margin-top: 10mm; }
+  </style>
+</head>
+<body>
+  <p class="brand">MediSlot</p>
+  <p class="ref">Référence <span th:text="${c.reference}">RDV-0</span> · émise le <span th:text="${c.issuedOn}">date</span></p>
+
+  <h1>Convocation à votre rendez-vous</h1>
+  <p class="lead">Bonjour <strong th:text="${c.patientName}">patient</strong>, votre rendez-vous est confirmé.</p>
+
+  <div class="when">
+    <p class="date"><span th:text="${c.day}">jour</span> à <span th:text="${c.time}">heure</span></p>
+    <p>(heure de Paris)</p>
+  </div>
+
+  <table>
+    <tr><th scope="row">Praticien</th><td th:text="${c.professionalName}">praticien</td></tr>
+    <tr><th scope="row">Spécialité</th><td th:text="${c.specialty}">spécialité</td></tr>
+    <tr><th scope="row">Adresse du cabinet</th><td th:text="${c.address + ', ' + c.city}">adresse</td></tr>
+    <tr><th scope="row">Patient</th><td th:text="${c.patientName}">patient</td></tr>
+  </table>
+
+  <h2>À prévoir</h2>
+  <ul>
+    <li>Présentez-vous au cabinet quelques minutes avant l’heure indiquée.</li>
+    <li>Pour déplacer ou annuler, utilisez « Mes rendez-vous » dans votre espace MediSlot.</li>
+  </ul>
+
+  <p class="note">Document d’information, sans valeur de prescription. Application de formation :
+    praticiens et données fictifs.</p>
+</body>
+</html>
