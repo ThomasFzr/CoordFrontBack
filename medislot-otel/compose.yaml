@@ -1,0 +1,57 @@
+# Projet distinct du MediSlot du module : `docker compose down -v` ici n'efface pas l'autre base.
+name: medislot-otel
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: medislot
+      POSTGRES_USER: medislot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-medislot-local-only}
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medislot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/medislot
+      DB_PASSWORD: ${DB_PASSWORD:-medislot-local-only}
+      DEMO_SEED: "true"
+      # OpenTelemetry (cours, chapitre 3)
+      JAVA_TOOL_OPTIONS: -javaagent:/app/opentelemetry-javaagent.jar   # la JVM charge l'agent
+      OTEL_SERVICE_NAME: medislot-api                                  # nom affiché dans Jaeger
+      # service.version = commit déployé (export GIT_SHA=$(git rev-parse --short HEAD) avant le build).
+      OTEL_RESOURCE_ATTRIBUTES: service.version=${GIT_SHA:-local},deployment.environment.name=formation
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318               # OTLP sur HTTP, l'agent ajoute /v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: parentbased_always_on                       # suit la décision du navigateur
+      OTEL_METRICS_EXPORTER: none                                      # ni métriques ni journaux : pas de récepteur
+      OTEL_LOGS_EXPORTER: none
+    depends_on:
+      db: {condition: service_healthy}
+      collector: {condition: service_started}
+    ports: ["127.0.0.1:18080:8080"]
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
+    depends_on: [backend, collector]
+    ports: ["127.0.0.1:8088:80"]
+  # Reçoit les spans du back et du navigateur (relayés par Nginx sur /otlp/), les nettoie, les envoie à Jaeger.
+  # Aucun port publié : seul le réseau Docker interne y accède.
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observabilite/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on: [jaeger]
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    # Interface sur la machine seulement : Jaeger n'a pas d'authentification (cours, chapitre 6).
+    ports: ["127.0.0.1:16686:16686"]
+volumes:
+  pgdata:

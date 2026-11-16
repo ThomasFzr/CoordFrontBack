@@ -1,0 +1,35 @@
+# Collecteur OpenTelemetry 0.165.0 (cours, chapitres 5 et 6) : recevoir, nettoyer, exporter vers Jaeger.
+receivers:
+  otlp:
+    protocols:
+      # Toutes les interfaces du conteneur : par défaut le collecteur n'écoute que localhost.
+      http: {endpoint: 0.0.0.0:4318}
+
+processors:
+  memory_limiter: {check_interval: 1s, limit_mib: 200}
+  # Filet pour les données personnelles ou de santé qui auraient échappé au code et au SDK du navigateur.
+  attributes/sante:
+    actions:
+      - {key: url.query, action: delete}        # saisie dans l'URL
+      - {key: enduser.id, action: delete}       # identité de l'utilisateur
+      - {key: user.email, action: delete}
+      - {key: user.name, action: delete}
+  # url.full garde la requête (?q=…) côté back : on la coupe ici, sans supprimer l'attribut (utile pour enquêter).
+  transform/sante:
+    error_mode: ignore
+    trace_statements:
+      - replace_pattern(span.attributes["url.full"], "\\?.*$", "")
+  batch: {}
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: jaeger:4317
+    tls: {insecure: true}                       # réseau Docker interne
+  debug: {verbosity: basic}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/sante, transform/sante, batch]
+      exporters: [otlp_grpc/jaeger, debug]
