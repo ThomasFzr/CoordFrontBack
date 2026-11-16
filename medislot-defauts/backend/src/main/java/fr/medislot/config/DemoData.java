@@ -2,6 +2,7 @@ package fr.medislot.config;
 import fr.medislot.domain.*;
 import fr.medislot.repository.*;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -9,10 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 @Component @ConditionalOnProperty(name="medislot.demo-seed",havingValue="true")
 public class DemoData implements CommandLineRunner {
- private final UserRepository users;private final ProfessionalRepository professionals;private final SlotRepository slots;private final PasswordEncoder encoder;
- public DemoData(UserRepository u,ProfessionalRepository p,SlotRepository s,PasswordEncoder e){users=u;professionals=p;slots=s;encoder=e;}
+ private final UserRepository users;private final ProfessionalRepository professionals;private final SlotRepository slots;private final PasswordEncoder encoder;private final String demoPassword;
+ // S6437 : plus de mot de passe écrit dans le code ; il est fourni par DEMO_PASSWORD (compose.yaml) quand DEMO_SEED=true.
+ public DemoData(UserRepository u,ProfessionalRepository p,SlotRepository s,PasswordEncoder e,@Value("${medislot.demo-password:}") String demoPassword){users=u;professionals=p;slots=s;encoder=e;this.demoPassword=demoPassword;}
  @Override @Transactional public void run(String...args){
-  if(!users.existsByEmail("patient@medislot.test")){for(String email:new String[]{"patient@medislot.test","autre@medislot.test"}){AppUser u=new AppUser();u.email=email;u.name=email.startsWith("patient")?"Camille Dupont":"Alex Martin";u.role="PATIENT";u.password=encoder.encode("MediSlot-demo-2026!");users.save(u);}}
+  if(demoPassword.isBlank())throw new IllegalStateException("DEMO_SEED=true exige DEMO_PASSWORD (mot de passe des comptes de démonstration).");
+  if(!users.existsByEmail("patient@medislot.test")){for(String email:new String[]{"patient@medislot.test","autre@medislot.test"}){AppUser u=new AppUser();u.email=email;u.name=email.startsWith("patient")?"Camille Dupont":"Alex Martin";u.role="PATIENT";u.password=encoder.encode(demoPassword);users.save(u);}}
   if(professionals.count()>0)return;
   String[][] rows={{"Dr Sarah Martin","general","Paris","18 avenue de la République"},{"Dr Thomas Leroy","cardiology","Paris","42 rue de Rennes"},{"Dr Amel Benali","dermatology","Lyon","6 rue de la Charité"},{"Dr Hugo Petit","general","Lyon","21 cours Lafayette"},{"Dr Léa Moreau","dentistry","Paris","12 boulevard Saint-Germain"},{"Dr Inès Diallo","general","Bordeaux","8 cours de Verdun"}};
   for(String[] row:rows){Professional p=new Professional();p.name=row[0];p.specialty=row[1];p.city=row[2];p.address=row[3];p.bio="Un accompagnement attentif, dans un cabinet accessible. Les informations de ce profil sont fictives et servent à la formation MediSlot.";p.fee=row[1].equals("general")?30:60;professionals.save(p);

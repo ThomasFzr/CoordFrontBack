@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PractitionerSearchController {
 
     private static final Logger log = LoggerFactory.getLogger(PractitionerSearchController.class);
-    private static final Pattern NOM_VALIDE = Pattern.compile("^([a-zA-Zéèêàï ]+\\s?)*$");
+    private static final Pattern NOM_VALIDE = Pattern.compile("^[a-zA-Zéèêàï ]*$");
 
     private final JdbcTemplate jdbc;
     private int nbRecherches = 0;
@@ -37,19 +37,19 @@ public class PractitionerSearchController {
         if (!NOM_VALIDE.matcher(nom).matches()) {
             return new ArrayList<>();
         }
-        String filtre = null;
+        // S2077 : les saisies sont des paramètres de la requête (?), jamais du SQL concaténé.
+        StringBuilder sql = new StringBuilder("SELECT id, name, specialty, city, address, fee FROM professional WHERE lower(name) LIKE ?");
+        List<Object> parametres = new ArrayList<>();
+        parametres.add("%" + nom.toLowerCase() + "%");
+        if (ville != null && !ville.isBlank()) {
+            sql.append(" AND lower(city) = ?");
+            parametres.add(ville.trim().toLowerCase());
+        }
         if (specialite != null && !specialite.isBlank()) {
-            filtre = specialite.trim();
+            sql.append(" AND specialty = ?");
+            parametres.add(specialite.trim());
         }
-        int longueurFiltre = filtre.length();
-        String filtreVille = "";
-        if (ville != null && ville.length() > 0) {
-            filtreVille = " AND lower(city) = '" + ville.toLowerCase() + "'";
-        }
-        String filtreSpecialite = longueurFiltre > 0 ? " AND specialty = '" + filtre + "'" : "";
-        List<Map<String, Object>> resultats = jdbc.queryForList(
-                "SELECT id, name, specialty, city, address, fee FROM professional WHERE lower(name) LIKE '%"
-                        + nom.toLowerCase() + "%'" + filtreVille + filtreSpecialite + " ORDER BY name LIMIT 50");
+        List<Map<String, Object>> resultats = jdbc.queryForList(sql.append(" ORDER BY name LIMIT 50").toString(), parametres.toArray());
         List<Map<String, Object>> sortie = new ArrayList<>();
         for (Map<String, Object> ligne : resultats) {
             Map<String, Object> m = new HashMap<>();

@@ -7,22 +7,18 @@ import fr.medislot.domain.Slot;
 import fr.medislot.repository.AppointmentRepository;
 import fr.medislot.repository.ProfessionalRepository;
 import fr.medislot.repository.SlotRepository;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/appointments")
@@ -32,7 +28,6 @@ public class AppointmentExportController {
     private final AppointmentRepository appointments;
     private final SlotRepository slots;
     private final ProfessionalRepository professionals;
-    private String dernierExport;
 
     public AppointmentExportController(BookingService service, AppointmentRepository appointments,
                                        SlotRepository slots, ProfessionalRepository professionals) {
@@ -42,29 +37,23 @@ public class AppointmentExportController {
         this.professionals = professionals;
     }
 
+    // S5443 : le CSV est construit en mémoire ; plus de fichier temporaire dans un dossier partagé.
     @GetMapping("/export")
-    public ResponseEntity<byte[]> exporter(Principal principal) throws Exception {
+    public ResponseEntity<byte[]> exporter(Principal principal) {
         Long patient = service.patient(principal.getName());
-        List<Appointment> liste = appointments.findAll();
-        File fichier = File.createTempFile("export-rdv", ".csv");
-        FileWriter writer = new FileWriter(fichier);
-        String csv = "id;praticien;specialite;ville;date;statut;tarif_ttc\n";
-        for (Appointment a : liste) {
-            if (a.patientId == patient) {
-                Slot s = slots.findById(a.slotId).get();
-                Professional p = professionals.findById(s.professionalId).get();
-                BigDecimal ttc = new BigDecimal(p.fee * 1.2);
-                csv = csv + ligne(a.id, p.name, p.specialty, p.city, s.startsAt.toString(), a.status, ttc.toString(), ";", true);
+        StringBuilder csv = new StringBuilder("id;praticien;specialite;ville;date;statut;tarif_ttc\n");
+        for (Appointment a : appointments.findAll()) {
+            if (patient.equals(a.patientId)) {
+                Slot s = slots.findById(a.slotId).orElseThrow();
+                Professional p = professionals.findById(s.professionalId).orElseThrow();
+                BigDecimal ttc = BigDecimal.valueOf(p.fee).multiply(new BigDecimal("1.2"));
+                csv.append(ligne(a.id, p.name, p.specialty, p.city, s.startsAt.toString(), a.status, ttc.toString(), ";", true));
             }
         }
-        writer.write(csv);
-        writer.flush();
-        dernierExport = new SimpleDateFormat("dd/MM/yyyy HH:mm").format(new Date());
-        byte[] contenu = Files.readAllBytes(fichier.toPath());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=mes-rendez-vous.csv")
                 .contentType(MediaType.parseMediaType("text/csv"))
-                .body(contenu);
+                .body(csv.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     private String ligne(Long id, String nom, String specialite, String ville, String date, String statut,
@@ -109,18 +98,14 @@ public class AppointmentExportController {
         return id + separateur + nom + separateur + spec + separateur + ville + separateur + date + separateur + st + separateur + tarif + "\n";
     }
 
+    // Un patient ne lit que la fiche de ses propres rendez-vous ; sinon 404, sans révéler que l'identifiant existe.
     @GetMapping("/{id}/fiche")
-    public AppointmentController.AppointmentDto fiche(@PathVariable Long id) {
-        Appointment a = appointments.findById(id).get();
-        Slot s = slots.findById(a.slotId).get();
-        Professional p = professionals.findById(s.professionalId).get();
+    public AppointmentController.AppointmentDto fiche(@PathVariable Long id, Principal principal) {
+        Long patient = service.patient(principal.getName());
+        Appointment a = appointments.findById(id).filter(r -> patient.equals(r.patientId))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Rendez-vous introuvable."));
+        Slot s = slots.findById(a.slotId).orElseThrow();
+        Professional p = professionals.findById(s.professionalId).orElseThrow();
         return new AppointmentController.AppointmentDto(a.id, s.id, p.id, p.name, p.specialty, p.address, p.city, s.startsAt, a.status);
-    }
-
-    private void nettoyer(File f) {
-        try {
-            Files.delete(f.toPath());
-        } catch (IOException e) {
-        }
     }
 }

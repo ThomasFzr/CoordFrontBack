@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, computed, onMounted, watch} from 'vue';
+import {ref, onMounted, watch} from 'vue';
 import {specialties} from '../types';
 import type {Professional, Slot} from '../types';
 
@@ -9,9 +9,8 @@ const specialite = ref<any>('general');
 const resultats = ref<any[]>([]);
 const message = ref<any>('');
 const enCours = ref(false);
-const VILLE_VALIDE = /^([a-zA-Zéèàï\- ]+)+$/;
-
-const titre = computed(() => 'Résultats pour <b>' + nom.value + '</b> à ' + ville.value);
+// S5852 : plus de groupe répété contenant lui-même une répétition ((…+)+), qui pouvait bloquer le navigateur.
+const VILLE_VALIDE = /^[a-zA-Zéèàï\- ]+$/;
 
 async function rechercher() {
   enCours.value = true;
@@ -53,7 +52,8 @@ onMounted(() => {
       <label><span>Ville</span><input v-model="ville" placeholder="Paris, Lyon…"></label>
       <button type="submit" :disabled="enCours">Rechercher</button>
     </form>
-    <h2 v-html="titre"></h2>
+    <!-- Saisie affichée comme du texte (interpolation échappée par Vue), jamais comme du HTML. -->
+    <h2>Résultats pour <b>{{nom}}</b> à {{ville}}</h2>
     <p class="subtle">{{message}}</p>
     <article v-for="p in resultats" :key="p.id" class="appointment">
       <div class="appointment-person"><h2>{{p.nom}}</h2><p>{{specialties[p.specialite]}} · {{p.ville}}</p><p>{{p.adresse}} · {{p.tarif}} €</p></div>

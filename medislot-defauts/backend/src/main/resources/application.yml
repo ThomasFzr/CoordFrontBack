@@ -25,15 +25,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: "*"
-  endpoint:
-    env:
-      show-values: ALWAYS
-    configprops:
-      show-values: ALWAYS
+        include: health
 medislot:
-  demo-seed: ${DEMO_SEED:true}
+  demo-seed: ${DEMO_SEED:false}
+  demo-password: ${DEMO_PASSWORD:}
   export:
     aws-access-key-id: ${EXPORT_AWS_ACCESS_KEY_ID:}
-  admin-password: Admin-MediSlot-2026
-  jwt-secret: c2VjcmV0LW1lZGlzbG90LXByb2QtbmUtcGFzLWNvbW1pdHRlcg==

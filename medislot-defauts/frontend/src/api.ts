@@ -4,7 +4,8 @@ export async function refreshCsrf(){const r=await fetch('/api/csrf',{credentials
 export async function api<T>(path:string,init:RequestInit={}):Promise<T>{
  const method=(init.method||'GET').toUpperCase();const headers=new Headers(init.headers);
  if(!['GET','HEAD','OPTIONS'].includes(method)){if(!csrf)await refreshCsrf();headers.set(csrf!.headerName,csrf!.token);}
- if(init.body&&!(init.body instanceof URLSearchParams))headers.set('Content-Type','application/json');
+ // FormData (envoi de fichier) : le navigateur pose lui-même le Content-Type multipart.
+if(init.body&&!(init.body instanceof URLSearchParams)&&!(init.body instanceof FormData))headers.set('Content-Type','application/json');
  const response=await fetch('/api'+path,{...init,headers,credentials:'same-origin'});
  if(!response.ok){let message='Le service est momentanément indisponible.';try{const p=await response.json();message=p.detail||p.title||message}catch{}throw new ApiError(message,response.status);}
  if(response.status===204)return undefined as T;

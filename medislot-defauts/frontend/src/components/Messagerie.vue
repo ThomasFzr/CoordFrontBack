@@ -13,7 +13,7 @@ async function charger() {
 async function envoyer() {
   if (contenu.value == '') return;
   await api('/messages', {method: 'POST', body: JSON.stringify({contenu: contenu.value})});
-  if (apercu.value) apercu.value.innerHTML = 'Dernier message envoyé : ' + contenu.value;
+  if (apercu.value) apercu.value.textContent = 'Dernier message envoyé : ' + contenu.value;
   contenu.value = '';
   charger();
 }
@@ -35,7 +35,7 @@ onMounted(() => {
     </form>
     <div ref="apercu" class="subtle"></div>
     <article v-for="m in messages" :key="m.id" class="appointment">
-      <div class="appointment-person"><strong>{{m.auteur}}</strong><p v-html="m.contenu"></p></div>
+      <div class="appointment-person"><strong>{{m.auteur}}</strong><p class="message-texte">{{m.contenu}}</p></div>
       <div class="appointment-actions"><button class="text-button" @click="ouvrir(m.id)">Aperçu</button><a :href="'/api/messages/' + m.id + '/apercu'" target="_blank">Ouvrir</a></div>
     </article>
   </div>

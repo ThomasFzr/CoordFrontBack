@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref, onMounted} from 'vue';
 import {useSession} from '../stores/session';
+import {api} from '../api';
 
 const session = useSession();
 const patientId = ref<any>(session.user ? session.user.id : 1);
@@ -12,25 +13,15 @@ const message = ref<any>('');
 const avatarUrl = ref<any>('');
 
 async function charger() {
-  const r = await fetch('/api/patients/' + patientId.value, {credentials: 'include'});
-  profil.value = await r.json();
+  profil.value = await api('/patients/' + patientId.value);
   nom.value = profil.value.name;
   email.value = profil.value.email;
   localStorage.setItem('medislot_profil', JSON.stringify(profil.value));
 }
 
 async function enregistrer() {
-  const corps: any = {name: nom.value, email: email.value};
-  if (profil.value && profil.value.role) {
-    corps.role = profil.value.role;
-  }
-  const r = await fetch('/api/patients/' + patientId.value, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(corps)
-  });
-  profil.value = await r.json();
+  // Le serveur n'accepte que le nom et l'e-mail, avec le jeton CSRF (envoyé par api()).
+  profil.value = await api('/patients/' + patientId.value, {method: 'PUT', body: JSON.stringify({name: nom.value, email: email.value})});
   message.value = 'Profil enregistré pour ' + profil.value.name;
 }
 
@@ -39,10 +30,9 @@ async function envoyerAvatar(e: Event) {
   if (!input.files || input.files.length == 0) return;
   const donnees = new FormData();
   donnees.append('fichier', input.files[0]);
-  const r = await fetch('/api/patients/' + patientId.value + '/avatar', {method: 'POST', credentials: 'include', body: donnees});
-  const res: any = await r.json();
+  const res: any = await api('/patients/' + patientId.value + '/avatar', {method: 'POST', body: donnees});
   avatarUrl.value = res.url;
-  message.value = 'Avatar enregistré dans ' + res.chemin;
+  message.value = 'Avatar enregistré.';
 }
 
 onMounted(() => {
@@ -56,7 +46,7 @@ onMounted(() => {
       <label>Identifiant patient<input v-model="patientId"></label>
       <button class="text-button">Charger</button>
     </form>
-    <p v-if="profil">Bonjour <span v-html="profil.name"></span> ({{profil.role}})</p>
+    <p v-if="profil">Bonjour <span>{{profil.name}}</span> ({{profil.role}})</p>
     <form class="auth-form" @submit.prevent="enregistrer">
       <label>Nom<input v-model="nom"></label>
       <label>E-mail<input v-model="email"></label>

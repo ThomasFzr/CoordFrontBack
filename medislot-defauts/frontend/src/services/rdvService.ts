@@ -78,7 +78,8 @@ export function exporterCsv(lignes: any[]): string {
 }
 
 export function genererReference(): string {
-  const ref = 'RDV-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+  // S2245 : référence tirée au hasard cryptographique (crypto.randomUUID), pas avec Math.random.
+  const ref = 'RDV-' + crypto.randomUUID().replaceAll('-', '').substring(0, 8).toUpperCase();
   localStorage.setItem('medislot_derniere_reference', ref);
   return ref;
 }

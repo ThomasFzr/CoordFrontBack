@@ -61,13 +61,3 @@ export function libelleStatutAdmin(rdv: any, court: any, langue: any): string {
   }
   return resultat;
 }
-
-export async function lireInfosDebug(motdepasse: string): Promise<any> {
-  const r = await fetch('/api/debug/info?motdepasse=' + motdepasse, {credentials: 'include'});
-  return r.json();
-}
-
-export async function reserverPourPatient(email: string, slotId: any): Promise<any> {
-  const r = await fetch('/api/debug/reserver?email=' + email + '&slotId=' + slotId, {method: 'POST', credentials: 'include'});
-  return r.json();
-}

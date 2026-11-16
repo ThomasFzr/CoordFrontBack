@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest @Testcontainers
 class BookingIntegrationTest {
  @Container static PostgreSQLContainer db=new PostgreSQLContainer("postgres:18");
- @DynamicPropertySource static void database(DynamicPropertyRegistry r){r.add("spring.datasource.url",db::getJdbcUrl);r.add("spring.datasource.username",db::getUsername);r.add("spring.datasource.password",db::getPassword);}
+ @DynamicPropertySource static void database(DynamicPropertyRegistry r){r.add("spring.datasource.url",db::getJdbcUrl);r.add("spring.datasource.username",db::getUsername);r.add("spring.datasource.password",db::getPassword);r.add("medislot.demo-seed",()->"true");r.add("medislot.demo-password",()->"mot-de-passe-de-test");}
  @Autowired BookingService booking; @Autowired SlotRepository slots; @Autowired AuditRepository audit;
  @Test void concurrentBookingsProduceOneWinner() throws Exception {
   Long slot=slots.available(1L,Instant.now(),Instant.now().plus(Duration.ofDays(14))).getFirst().id;

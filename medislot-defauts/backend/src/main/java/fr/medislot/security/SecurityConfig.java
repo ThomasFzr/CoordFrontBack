@@ -7,22 +7,17 @@ import org.springframework.security.core.userdetails.*;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import java.util.List;
 @Configuration
 public class SecurityConfig {
  @Bean PasswordEncoder encoder(){return new BCryptPasswordEncoder();}
  @Bean UserDetailsService users(UserRepository users){return email -> users.findByEmail(email.toLowerCase(java.util.Locale.ROOT)).map(u->User.withUsername(u.email).password(u.password).roles(u.role).build()).orElseThrow(()->new UsernameNotFoundException("Identité inconnue"));}
- CorsConfigurationSource corsSource(){CorsConfiguration config=new CorsConfiguration();config.setAllowedOriginPatterns(List.of("*"));config.addAllowedHeader("*");config.addAllowedMethod("*");config.setAllowCredentials(true);UrlBasedCorsConfigurationSource source=new UrlBasedCorsConfigurationSource();source.registerCorsConfiguration("/**",config);return source;}
+ // S5122 : pas de CORS ouvert à toutes les origines avec cookies ; le front passe par la même origine (nginx).
+ // S4502 : la protection CSRF s'applique à toutes les routes, le front envoie le jeton (api.ts).
  @Bean SecurityFilterChain filter(HttpSecurity http) throws Exception {
   http.authorizeHttpRequests(a->a.dispatcherTypeMatchers(DispatcherType.ASYNC,DispatcherType.ERROR).permitAll()
-    .requestMatchers("/api/csrf","/api/register","/api/login","/api/professionals/**","/api/events","/actuator/**","/api/debug/**","/api/praticiens/**","/api/compte/**").permitAll()
+    .requestMatchers("/api/csrf","/api/register","/api/login","/api/professionals/**","/api/events","/actuator/health","/api/praticiens/**","/api/compte/**").permitAll()
     .requestMatchers("/api/**").authenticated().anyRequest().permitAll())
-   .csrf(c->c.ignoringRequestMatchers("/api/debug/**","/api/praticiens/**","/api/appointments/export","/api/patients/**","/api/compte/**"))
    .headers(h->h.disable())
-   .cors(c->c.configurationSource(corsSource()))
    .requestCache(c->c.disable())
    .formLogin(f->f.loginProcessingUrl("/api/login")
     .successHandler((req,res,auth)->res.setStatus(204))
