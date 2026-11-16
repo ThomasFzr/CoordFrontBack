@@ -1,0 +1,30 @@
+name: medislot-formation
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: medislot
+      POSTGRES_USER: medislot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-medislot-local-only}
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medislot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/medislot
+      DB_PASSWORD: ${DB_PASSWORD:-medislot-local-only}
+      DEMO_SEED: "true"
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["127.0.0.1:18080:8080"]
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+    ports: ["127.0.0.1:8088:80"]
+volumes:
+  pgdata:

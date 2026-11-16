@@ -1,0 +1,4 @@
+# Profil « postgis » : même base, extension PostGIS, recherche par ST_DWithin (PostgisNearbyFinder).
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/postgis

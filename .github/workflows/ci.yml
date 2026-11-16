@@ -5,10 +5,11 @@ on:
   # Le TP SonarQube (medislot-defauts/, sonarqube/) est analysé par SonarQube en local, pas par cette CI.
   # Le TP OpenTelemetry (medislot-otel/) se vérifie sur la pile Docker locale (tests/verifier_traces.sh, Playwright).
   # Le TP Génération de documents (medislot-convocation/) se vérifie en local (mvn test, Vitest, Playwright, tests/preuves_convocation.sh).
+  # Le TP Géolocalisation (medislot-geoloc/) se vérifie en local (mvn test, Vitest, Playwright, tests/preuves_geoloc.sh).
   push:
-    paths-ignore: ["medislot/**", "medislot-defauts/**", "medislot-otel/**", "medislot-convocation/**", "sonarqube/**", ".github/workflows/medislot.yml"]
+    paths-ignore: ["medislot/**", "medislot-defauts/**", "medislot-otel/**", "medislot-convocation/**", "medislot-geoloc/**", "sonarqube/**", ".github/workflows/medislot.yml"]
   pull_request:
-    paths-ignore: ["medislot/**", "medislot-defauts/**", "medislot-otel/**", "medislot-convocation/**", "sonarqube/**", ".github/workflows/medislot.yml"]
+    paths-ignore: ["medislot/**", "medislot-defauts/**", "medislot-otel/**", "medislot-convocation/**", "medislot-geoloc/**", "sonarqube/**", ".github/workflows/medislot.yml"]
   schedule:
     # Relevé quotidien du baromètre (03:00 UTC), même sans push.
     - cron: "0 3 * * *"

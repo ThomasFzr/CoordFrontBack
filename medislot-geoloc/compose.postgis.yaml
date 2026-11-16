@@ -1,0 +1,12 @@
+# Défi PostGIS, sous un nom de projet à part (volume à part) :
+#   docker compose -p medislot-geoloc-postgis -f compose.yaml -f compose.postgis.yaml up -d --build
+# Pourquoi à part : une base migrée en V3 n'est plus acceptée par Flyway sans le profil postgis (migration « manquante »).
+# Même schéma : l'image postgis/postgis:18-3.6 est construite sur postgres:18 (amd64 seulement :
+# émulée sur un Mac Apple Silicon). La migration V3 ajoute l'extension, la colonne location et son index GiST.
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    platform: linux/amd64
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: postgis

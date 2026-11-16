@@ -1,0 +1,16 @@
+@startuml
+class AppUser { id : Long
+ email : String }
+class Professional { id : Long
+ specialty : String }
+class Slot { id : Long
+ startsAt : Instant }
+class Appointment { id : Long
+ status : String }
+class AuditEvent { action : String }
+AppUser "1" -- "0..*" Appointment
+Professional "1" -- "0..*" Slot
+Slot "1" -- "0..*" Appointment
+Appointment "1" -- "1..*" AuditEvent
+note bottom of Appointment : Un seul CONFIRMED par créneau
+@enduml

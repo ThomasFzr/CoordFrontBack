@@ -1,0 +1,7 @@
+flowchart LR
+ Patient --> Vue
+ Vue -->|HTTP même origine| Nginx
+ Nginx --> Spring
+ Spring --> PostgreSQL[(PostgreSQL)]
+ Spring -->|SSE| Nginx
+ Nginx -->|SSE| Vue

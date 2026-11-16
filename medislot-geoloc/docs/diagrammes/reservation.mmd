@@ -1,0 +1,11 @@
+sequenceDiagram
+ participant V as Vue
+ participant S as Spring
+ participant P as PostgreSQL
+ V->>S: POST /appointments
+ S->>P: verrou créneau et contrôles
+ S->>P: INSERT rendez-vous + historique
+ P-->>S: COMMIT
+ S-->>V: 201 + DTO
+ S-->>V: SSE slots-changed
+ V->>S: GET disponibilités
